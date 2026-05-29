@@ -1,0 +1,128 @@
+"use client";
+import Link from "next/link";
+import { usePathname } from "next/navigation";
+import {
+  LayoutDashboard,
+  Users2,
+  Send,
+  Layers3,
+  Workflow,
+  FileText,
+  BarChart3,
+  Inbox,
+  Settings,
+  UserCog,
+  Sparkles,
+  HelpCircle,
+} from "lucide-react";
+import { Logo } from "@/components/brand/logo";
+import { cn } from "@/lib/utils";
+
+const navMain = [
+  { label: "Dashboard", href: "/dashboard", icon: LayoutDashboard },
+  { label: "Leads", href: "/leads", icon: Users2 },
+  { label: "Segments", href: "/segments", icon: Layers3 },
+  { label: "Campaigns", href: "/campaigns", icon: Send },
+  { label: "Workflows", href: "/workflows", icon: Workflow },
+  { label: "Inbox", href: "/inbox", icon: Inbox, badge: 4 },
+  { label: "Templates", href: "/templates", icon: FileText },
+  { label: "Analytics", href: "/analytics", icon: BarChart3 },
+];
+
+const navAdmin = [
+  { label: "User Management", href: "/users", icon: UserCog },
+  { label: "Settings", href: "/settings", icon: Settings },
+];
+
+export function Sidebar() {
+  const pathname = usePathname();
+
+  return (
+    <aside className="w-64 bg-white border-r border-slate-200 flex flex-col h-screen sticky top-0">
+      <div className="p-5 border-b border-slate-100">
+        <Logo />
+      </div>
+
+      <nav className="flex-1 overflow-y-auto p-3 space-y-6">
+        <div>
+          <p className="px-3 mb-2 text-[11px] font-semibold uppercase tracking-wider text-slate-400">Workspace</p>
+          <ul className="space-y-0.5">
+            {navMain.map((item) => {
+              const Icon = item.icon;
+              const active = pathname === item.href || pathname.startsWith(item.href + "/");
+              return (
+                <li key={item.href}>
+                  <Link
+                    href={item.href}
+                    className={cn(
+                      "flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition-colors group",
+                      active
+                        ? "bg-blue-50 text-blue-700"
+                        : "text-slate-600 hover:bg-slate-50 hover:text-slate-900"
+                    )}
+                  >
+                    <Icon className={cn("h-4.5 w-4.5 flex-shrink-0", active ? "text-blue-600" : "text-slate-400 group-hover:text-slate-600")} strokeWidth={2} />
+                    <span className="flex-1">{item.label}</span>
+                    {item.badge && (
+                      <span className="bg-blue-600 text-white text-[10px] font-bold rounded-full px-1.5 py-0.5 min-w-[18px] text-center">
+                        {item.badge}
+                      </span>
+                    )}
+                  </Link>
+                </li>
+              );
+            })}
+          </ul>
+        </div>
+
+        <div>
+          <p className="px-3 mb-2 text-[11px] font-semibold uppercase tracking-wider text-slate-400">Admin</p>
+          <ul className="space-y-0.5">
+            {navAdmin.map((item) => {
+              const Icon = item.icon;
+              const active = pathname === item.href;
+              return (
+                <li key={item.href}>
+                  <Link
+                    href={item.href}
+                    className={cn(
+                      "flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition-colors group",
+                      active
+                        ? "bg-blue-50 text-blue-700"
+                        : "text-slate-600 hover:bg-slate-50 hover:text-slate-900"
+                    )}
+                  >
+                    <Icon className={cn("h-4.5 w-4.5", active ? "text-blue-600" : "text-slate-400 group-hover:text-slate-600")} strokeWidth={2} />
+                    <span>{item.label}</span>
+                  </Link>
+                </li>
+              );
+            })}
+          </ul>
+        </div>
+      </nav>
+
+      <div className="p-3 border-t border-slate-100 space-y-2">
+        <div className="bg-gradient-to-br from-blue-600 to-indigo-600 rounded-xl p-4 text-white">
+          <div className="flex items-center gap-2 mb-2">
+            <Sparkles className="h-4 w-4" />
+            <p className="font-semibold text-sm">AI Credits</p>
+          </div>
+          <p className="text-xs text-blue-100 mb-2">2,847 / 5,000 used</p>
+          <div className="h-1.5 bg-white/20 rounded-full overflow-hidden">
+            <div className="h-full bg-white rounded-full" style={{ width: "57%" }} />
+          </div>
+          <button className="mt-3 text-xs font-medium text-white/90 hover:text-white">Upgrade plan →</button>
+        </div>
+
+        <Link
+          href="#"
+          className="flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium text-slate-600 hover:bg-slate-50"
+        >
+          <HelpCircle className="h-4.5 w-4.5 text-slate-400" />
+          Help & Support
+        </Link>
+      </div>
+    </aside>
+  );
+}

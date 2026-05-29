@@ -1,0 +1,7 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(python3 -c \"import zipfile; z=zipfile.ZipFile\\('/Users/apple/Downloads/Ai Lead Nurture Platform Product Blueprint.docx'\\); print\\([f for f in z.namelist\\(\\) if 'document' in f.lower\\(\\)]\\)\")"
+    ]
+  }
+}

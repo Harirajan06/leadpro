@@ -1,11 +1,14 @@
 "use client";
-import { useState } from "react";
+import { useState, useTransition } from "react";
 import Link from "next/link";
-import { ArrowLeft, Save, Play, Zap, Mail, Clock, GitBranch, UserPlus, Bell, RefreshCw, FileDown, MessageSquare, Settings, ScrollText, Plus } from "lucide-react";
+import { useRouter } from "next/navigation";
+import { ArrowLeft, Save, Play, Zap, Mail, Clock, GitBranch, UserPlus, Bell, RefreshCw, FileDown, MessageSquare, Settings, ScrollText, Plus, AlertCircle } from "lucide-react";
+import { Input, Select } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Tabs } from "@/components/ui/tabs";
+import { createWorkflow } from "@/lib/queries/workflows";
 
 const palette = [
   { group: "Triggers", color: "border-emerald-200 bg-emerald-50 text-emerald-700", items: [
@@ -62,7 +65,26 @@ function Connector({ label }: { label?: string }) {
 }
 
 export default function WorkflowBuilderPage() {
+  const router = useRouter();
+  const [pending, start] = useTransition();
   const [tab, setTab] = useState("builder");
+  const [name, setName] = useState("Lead Capture & Welcome Email");
+  const [description, setDescription] = useState("Triggered when new lead submits website form");
+  const [folder, setFolder] = useState("Lead Generation");
+  const [error, setError] = useState<string | null>(null);
+
+  function handleSave(status: "Draft" | "Active") {
+    setError(null);
+    if (!name.trim()) { setError("Name required"); return; }
+    start(async () => {
+      try {
+        await createWorkflow({ workflow_name: name.trim(), description, folder, status });
+        router.push("/workflows");
+      } catch (err) {
+        setError(err instanceof Error ? err.message : "Save failed");
+      }
+    });
+  }
 
   return (
     <div className="max-w-[1600px] mx-auto">
@@ -72,17 +94,23 @@ export default function WorkflowBuilderPage() {
             <ArrowLeft className="h-4 w-4" /> Back to workflows
           </Link>
           <div className="flex items-center gap-2">
-            <h1 className="text-2xl font-bold text-slate-900">Lead Capture & Welcome Email</h1>
-            <Badge variant="success">Active</Badge>
+            <Input value={name} onChange={(e) => setName(e.target.value)} className="text-2xl font-bold border-transparent !h-auto px-0 hover:bg-slate-50 focus:bg-white focus:px-3 transition-all min-w-[400px]" />
+            <Badge variant="default">Draft</Badge>
           </div>
-          <p className="text-sm text-slate-500 mt-1">1,428 executions · Last run 2 mins ago</p>
         </div>
         <div className="flex items-center gap-2">
           <Button variant="outline">Test automation</Button>
-          <Button variant="outline"><Save className="h-4 w-4" /> Save</Button>
-          <Button><Play className="h-4 w-4" /> Activate</Button>
+          <Button variant="outline" onClick={() => handleSave("Draft")} disabled={pending}><Save className="h-4 w-4" /> Save</Button>
+          <Button onClick={() => handleSave("Active")} disabled={pending}><Play className="h-4 w-4" /> {pending ? "Activating..." : "Activate"}</Button>
         </div>
       </div>
+
+      {error && (
+        <div className="mb-4 flex items-start gap-2 bg-red-50 border border-red-200 rounded-lg p-3 text-sm text-red-700">
+          <AlertCircle className="h-4 w-4 mt-0.5 flex-shrink-0" />
+          <span>{error}</span>
+        </div>
+      )}
 
       <Tabs
         tabs={[
@@ -97,7 +125,6 @@ export default function WorkflowBuilderPage() {
 
       {tab === "builder" && (
         <div className="grid grid-cols-1 lg:grid-cols-[260px_1fr] gap-4">
-          {/* Palette */}
           <Card className="p-4 h-fit sticky top-20">
             <p className="text-xs font-semibold uppercase tracking-wider text-slate-400 mb-3">Drag to add</p>
             <div className="space-y-4">
@@ -119,7 +146,6 @@ export default function WorkflowBuilderPage() {
             </div>
           </Card>
 
-          {/* Canvas */}
           <Card className="p-8 bg-[radial-gradient(circle,_#e2e8f0_1px,_transparent_1px)] bg-[length:20px_20px] min-h-[700px]">
             <div className="flex flex-col items-center">
               <Node type="trigger" icon={<FileDown className="h-4 w-4 text-emerald-600" />} title="New lead via web form" desc="Triggered when /api/leads POST received" />
@@ -132,7 +158,6 @@ export default function WorkflowBuilderPage() {
               <Connector />
               <Node type="condition" icon={<GitBranch className="h-4 w-4 text-purple-600" />} title="Did they open the email?" desc="Check open event in last 24 hours" />
 
-              {/* Branching */}
               <div className="flex items-start justify-center gap-12 mt-2 w-full">
                 <div className="flex flex-col items-center">
                   <Connector label="YES" />
@@ -156,21 +181,18 @@ export default function WorkflowBuilderPage() {
         <Card className="p-6 max-w-2xl">
           <h3 className="font-semibold text-slate-900 mb-4">Workflow settings</h3>
           <div className="space-y-4 text-sm">
-            <div className="grid grid-cols-2 gap-3 py-3 border-b border-slate-100">
-              <span className="text-slate-500">Folder</span>
-              <span className="font-medium text-slate-900">Lead Generation</span>
+            <div>
+              <label className="block text-sm font-medium text-slate-700 mb-1.5">Description</label>
+              <Input value={description} onChange={(e) => setDescription(e.target.value)} />
             </div>
-            <div className="grid grid-cols-2 gap-3 py-3 border-b border-slate-100">
-              <span className="text-slate-500">Status</span>
-              <Badge variant="success">Active</Badge>
-            </div>
-            <div className="grid grid-cols-2 gap-3 py-3 border-b border-slate-100">
-              <span className="text-slate-500">Trigger source</span>
-              <span className="font-medium text-slate-900">/api/leads POST endpoint</span>
-            </div>
-            <div className="grid grid-cols-2 gap-3 py-3 border-b border-slate-100">
-              <span className="text-slate-500">Owner</span>
-              <span className="font-medium text-slate-900">Anuradha R.</span>
+            <div>
+              <label className="block text-sm font-medium text-slate-700 mb-1.5">Folder</label>
+              <Select value={folder} onChange={(e) => setFolder(e.target.value)}>
+                <option>Lead Generation</option>
+                <option>Marketing</option>
+                <option>Customer Support</option>
+                <option>Internal</option>
+              </Select>
             </div>
           </div>
         </Card>
@@ -181,18 +203,9 @@ export default function WorkflowBuilderPage() {
           <div className="p-4 border-b border-slate-100">
             <h3 className="font-semibold text-slate-900">Execution logs</h3>
           </div>
-          <ul className="divide-y divide-slate-100">
-            {Array.from({ length: 8 }).map((_, i) => (
-              <li key={i} className="p-4 hover:bg-slate-50 flex items-center gap-3">
-                <span className="h-2 w-2 rounded-full bg-emerald-500 flex-shrink-0" />
-                <div className="flex-1">
-                  <p className="text-sm text-slate-900">Triggered for lead L-{1000 + i}</p>
-                  <p className="text-xs text-slate-500">{i * 13} mins ago · 4 steps completed</p>
-                </div>
-                <Badge variant="success">Success</Badge>
-              </li>
-            ))}
-          </ul>
+          <div className="p-12 text-center text-slate-500 text-sm">
+            No executions yet. Logs will appear after workflow runs.
+          </div>
         </Card>
       )}
     </div>

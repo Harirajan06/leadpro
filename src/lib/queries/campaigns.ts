@@ -1,0 +1,74 @@
+"use server";
+import { createClient } from "@/lib/supabase/server";
+import { revalidatePath } from "next/cache";
+
+export interface CampaignRow {
+  id: string;
+  campaign_name: string;
+  campaign_type: string | null;
+  segment_id: string | null;
+  subject: string | null;
+  content: string | null;
+  status: string;
+  sent_count: number;
+  open_rate: number;
+  reply_rate: number;
+  bounce_rate: number;
+  created_by: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export async function getCampaigns(): Promise<CampaignRow[]> {
+  const supabase = await createClient();
+  const { data } = await supabase.from("campaigns").select("*").order("updated_at", { ascending: false });
+  return data || [];
+}
+
+export async function getCampaignStats() {
+  const supabase = await createClient();
+  const { data } = await supabase.from("campaigns").select("status, sent_count, open_rate, reply_rate");
+  if (!data) return { active: 0, totalSent: 0, avgOpen: 0, avgReply: 0 };
+  const active = data.filter((c) => c.status === "Active").length;
+  const totalSent = data.reduce((sum, c) => sum + (c.sent_count || 0), 0);
+  const activeCampaigns = data.filter((c) => c.sent_count > 0);
+  const avgOpen = activeCampaigns.length ? activeCampaigns.reduce((s, c) => s + Number(c.open_rate || 0), 0) / activeCampaigns.length : 0;
+  const avgReply = activeCampaigns.length ? activeCampaigns.reduce((s, c) => s + Number(c.reply_rate || 0), 0) / activeCampaigns.length : 0;
+  return { active, totalSent, avgOpen: Math.round(avgOpen * 10) / 10, avgReply: Math.round(avgReply * 10) / 10 };
+}
+
+export async function getCampaignById(id: string): Promise<CampaignRow | null> {
+  const supabase = await createClient();
+  const { data } = await supabase.from("campaigns").select("*").eq("id", id).single();
+  return data;
+}
+
+export async function createCampaign(payload: Partial<CampaignRow>) {
+  const supabase = await createClient();
+  const { data, error } = await supabase
+    .from("campaigns")
+    .insert({ campaign_name: payload.campaign_name || "Untitled Campaign", status: "Draft", ...payload })
+    .select()
+    .single();
+  if (error) throw error;
+  revalidatePath("/campaigns");
+  return data;
+}
+
+export async function updateCampaign(id: string, payload: Partial<CampaignRow>) {
+  const supabase = await createClient();
+  const { error } = await supabase.from("campaigns").update(payload).eq("id", id);
+  if (error) throw error;
+  revalidatePath("/campaigns");
+}
+
+export async function deleteCampaign(id: string) {
+  const supabase = await createClient();
+  const { error } = await supabase.from("campaigns").delete().eq("id", id);
+  if (error) throw error;
+  revalidatePath("/campaigns");
+}
+
+export async function setCampaignStatus(id: string, status: string) {
+  return updateCampaign(id, { status });
+}

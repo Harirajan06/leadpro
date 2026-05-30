@@ -2,7 +2,8 @@
   "permissions": {
     "allow": [
       "Bash(python3 -c \"import zipfile; z=zipfile.ZipFile\\('/Users/apple/Downloads/Ai Lead Nurture Platform Product Blueprint.docx'\\); print\\([f for f in z.namelist\\(\\) if 'document' in f.lower\\(\\)]\\)\")",
-      "Bash(PGPASSWORD='123@mecHari' psql -h db.braoaprimbjeofcbgtgs.supabase.co -p 5432 -U postgres -d postgres -f supabase/migrations/0002_rls_and_triggers.sql)"
+      "Bash(PGPASSWORD='123@mecHari' psql -h db.braoaprimbjeofcbgtgs.supabase.co -p 5432 -U postgres -d postgres -f supabase/migrations/0002_rls_and_triggers.sql)",
+      "Bash(PGPASSWORD='123@mecHari' psql -h db.braoaprimbjeofcbgtgs.supabase.co -p 5432 -U postgres -d postgres -f supabase/migrations/0004_richer_seed.sql)"
     ]
   }
 }

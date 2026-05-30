@@ -1,11 +1,13 @@
 "use client";
-import { useState } from "react";
+import { useState, useTransition } from "react";
 import Link from "next/link";
-import { ArrowLeft, Save, Send, Sparkles, Image, Link as LinkIcon, Type, Code, Calendar, Megaphone, PartyPopper, Mail, Plus, Clock, RefreshCw, Edit3 } from "lucide-react";
+import { useRouter } from "next/navigation";
+import { ArrowLeft, Save, Send, Sparkles, Image, Link as LinkIcon, Type, Code, Calendar, Megaphone, PartyPopper, Mail, Plus, Clock, RefreshCw, Edit3, AlertCircle } from "lucide-react";
 import { Input, Select, Textarea } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { createCampaign } from "@/lib/queries/campaigns";
 
 const suggestions = [
   { icon: <Calendar className="h-4 w-4" />, label: "Book demo meetings", color: "bg-blue-50 text-blue-700 hover:bg-blue-100" },
@@ -16,8 +18,29 @@ const suggestions = [
 ];
 
 export default function CampaignBuilderPage() {
+  const router = useRouter();
+  const [pending, start] = useTransition();
   const [name, setName] = useState("Untitled Campaign");
   const [prompt, setPrompt] = useState("");
+  const [error, setError] = useState<string | null>(null);
+
+  function handleSave(status: "Draft" | "Active") {
+    setError(null);
+    if (!name.trim()) { setError("Campaign name required"); return; }
+    start(async () => {
+      try {
+        await createCampaign({
+          campaign_name: name.trim(),
+          status,
+          content: prompt,
+          campaign_type: "Email Sequence",
+        });
+        router.push("/campaigns");
+      } catch (err) {
+        setError(err instanceof Error ? err.message : "Save failed");
+      }
+    });
+  }
 
   return (
     <div className="max-w-[1600px] mx-auto">
@@ -33,31 +56,32 @@ export default function CampaignBuilderPage() {
           />
         </div>
         <div className="flex items-center gap-2">
-          <div className="flex items-center gap-1.5 text-xs text-slate-500 mr-3">
-            <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" /> Autosaved 2s ago
-          </div>
           <Button variant="outline">Preview</Button>
-          <Button variant="outline"><Save className="h-4 w-4" /> Save draft</Button>
-          <Button><Send className="h-4 w-4" /> Launch</Button>
+          <Button variant="outline" onClick={() => handleSave("Draft")} disabled={pending}><Save className="h-4 w-4" /> Save draft</Button>
+          <Button onClick={() => handleSave("Active")} disabled={pending}><Send className="h-4 w-4" /> {pending ? "Launching..." : "Launch"}</Button>
         </div>
       </div>
 
+      {error && (
+        <div className="mb-4 flex items-start gap-2 bg-red-50 border border-red-200 rounded-lg p-3 text-sm text-red-700">
+          <AlertCircle className="h-4 w-4 mt-0.5 flex-shrink-0" />
+          <span>{error}</span>
+        </div>
+      )}
+
       <div className="grid grid-cols-1 lg:grid-cols-[380px_1fr] gap-6">
-        {/* Left: settings panel */}
         <div className="space-y-4">
           <Card className="p-5">
             <h3 className="font-semibold text-slate-900 mb-4">Campaign settings</h3>
-
             <div className="space-y-4">
               <div>
                 <label className="block text-sm font-medium text-slate-700 mb-1.5">Add leads from</label>
                 <Select>
                   <option>— Select source —</option>
-                  <option>Segment: High Intent CRM Leads (156)</option>
-                  <option>Segment: SAP Professionals (1,248)</option>
-                  <option>Segment: Webinar Attendees (892)</option>
-                  <option>All leads (2,847)</option>
-                  <option>Custom list...</option>
+                  <option>Segment: High Intent CRM Leads</option>
+                  <option>Segment: SAP Professionals</option>
+                  <option>Segment: Webinar Attendees</option>
+                  <option>All leads</option>
                 </Select>
               </div>
 
@@ -95,26 +119,10 @@ export default function CampaignBuilderPage() {
                   <option>Drip over time</option>
                 </Select>
               </div>
-
-              <div>
-                <label className="block text-sm font-medium text-slate-700 mb-1.5">Tracking</label>
-                <div className="space-y-2">
-                  <label className="flex items-center gap-2 text-sm text-slate-700">
-                    <input type="checkbox" defaultChecked className="rounded" /> Track opens
-                  </label>
-                  <label className="flex items-center gap-2 text-sm text-slate-700">
-                    <input type="checkbox" defaultChecked className="rounded" /> Track clicks
-                  </label>
-                  <label className="flex items-center gap-2 text-sm text-slate-700">
-                    <input type="checkbox" className="rounded" /> A/B test subject lines
-                  </label>
-                </div>
-              </div>
             </div>
           </Card>
         </div>
 
-        {/* Right: AI workspace */}
         <div className="space-y-4">
           <Card className="p-5 bg-gradient-to-br from-purple-50 via-blue-50 to-indigo-50 border-purple-100">
             <div className="flex items-center gap-2 mb-3">
@@ -139,6 +147,7 @@ export default function CampaignBuilderPage() {
                 {suggestions.map((s) => (
                   <button
                     key={s.label}
+                    type="button"
                     className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium ${s.color} transition-colors`}
                     onClick={() => setPrompt(s.label)}
                   >
@@ -149,15 +158,14 @@ export default function CampaignBuilderPage() {
             </div>
 
             <div className="flex items-center justify-end mt-4">
-              <Button><Sparkles className="h-4 w-4" /> Generate sequence</Button>
+              <Button type="button" disabled><Sparkles className="h-4 w-4" /> Generate sequence (requires OpenAI key)</Button>
             </div>
           </Card>
 
-          {/* Generated sequence */}
           <div>
             <div className="flex items-center justify-between mb-3">
               <h3 className="font-semibold text-slate-900">Email sequence</h3>
-              <Button variant="outline" size="sm"><RefreshCw className="h-3.5 w-3.5" /> Regenerate all</Button>
+              <Button variant="outline" size="sm" disabled><RefreshCw className="h-3.5 w-3.5" /> Regenerate all</Button>
             </div>
 
             <div className="space-y-3">
@@ -168,14 +176,10 @@ export default function CampaignBuilderPage() {
               ].map((s, i) => (
                 <Card key={i} className="p-4 hover:shadow-md transition-shadow">
                   <div className="flex items-start gap-3">
-                    <div className={`h-9 w-9 rounded-full ${s.color} text-white flex items-center justify-center flex-shrink-0`}>
-                      <Mail className="h-4 w-4" />
-                    </div>
+                    <div className={`h-9 w-9 rounded-full ${s.color} text-white flex items-center justify-center flex-shrink-0`}><Mail className="h-4 w-4" /></div>
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-2 mb-2 flex-wrap">
-                        <span className="text-xs font-semibold text-slate-500 inline-flex items-center gap-1">
-                          <Clock className="h-3 w-3" /> {s.day}
-                        </span>
+                        <span className="text-xs font-semibold text-slate-500 inline-flex items-center gap-1"><Clock className="h-3 w-3" /> {s.day}</span>
                         <Badge variant="purple"><Sparkles className="h-2.5 w-2.5" /> AI</Badge>
                       </div>
                       <Input value={s.subject} readOnly className="font-medium mb-2 bg-slate-50" />

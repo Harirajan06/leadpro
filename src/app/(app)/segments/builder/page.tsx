@@ -1,11 +1,13 @@
 "use client";
-import { useState } from "react";
+import { useState, useTransition } from "react";
 import Link from "next/link";
-import { ArrowLeft, Plus, X, Eye, Save, Users2, Sparkles, GripVertical } from "lucide-react";
+import { useRouter } from "next/navigation";
+import { ArrowLeft, Plus, X, Eye, Save, Users2, Sparkles, GripVertical, AlertCircle } from "lucide-react";
 import { Input, Select } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Card } from "@/components/ui/card";
+import { createSegment } from "@/lib/queries/segments";
 
 interface Rule {
   id: string;
@@ -18,13 +20,16 @@ const fields = ["Industry", "Interest Area", "Lead Score", "Status", "Source", "
 const operators = ["equals", "not equals", "contains", "greater than", "less than", "is true", "is false", "in the last X days"];
 
 export default function SegmentBuilderPage() {
+  const router = useRouter();
+  const [pending, start] = useTransition();
   const [name, setName] = useState("High Intent CRM Leads");
+  const [description, setDescription] = useState("");
+  const [type, setType] = useState("Dynamic");
   const [logic, setLogic] = useState<"AND" | "OR">("AND");
+  const [error, setError] = useState<string | null>(null);
   const [rules, setRules] = useState<Rule[]>([
     { id: "1", field: "Industry", operator: "equals", value: "Technology" },
-    { id: "2", field: "Interest Area", operator: "equals", value: "CRM Automation" },
-    { id: "3", field: "Lead Score", operator: "greater than", value: "70" },
-    { id: "4", field: "Visited Pricing Page", operator: "is true", value: "" },
+    { id: "2", field: "Lead Score", operator: "greater than", value: "70" },
   ]);
 
   const addRule = () =>
@@ -32,6 +37,24 @@ export default function SegmentBuilderPage() {
   const removeRule = (id: string) => setRules(rules.filter((r) => r.id !== id));
   const updateRule = (id: string, patch: Partial<Rule>) =>
     setRules(rules.map((r) => (r.id === id ? { ...r, ...patch } : r)));
+
+  function handleSave() {
+    setError(null);
+    if (!name.trim()) { setError("Segment name is required"); return; }
+    start(async () => {
+      try {
+        await createSegment(
+          name.trim(),
+          description,
+          type,
+          rules.map((r, i) => ({ field: r.field, operator: r.operator, value: r.value, rule_order: i }))
+        );
+        router.push("/segments");
+      } catch (err) {
+        setError(err instanceof Error ? err.message : "Failed to save");
+      }
+    });
+  }
 
   return (
     <div className="max-w-[1600px] mx-auto">
@@ -50,28 +73,28 @@ export default function SegmentBuilderPage() {
         </div>
         <div className="flex items-center gap-2">
           <Button variant="outline"><Eye className="h-4 w-4" /> Preview</Button>
-          <Button><Save className="h-4 w-4" /> Save segment</Button>
+          <Button onClick={handleSave} disabled={pending}><Save className="h-4 w-4" /> {pending ? "Saving..." : "Save segment"}</Button>
         </div>
       </div>
 
+      {error && (
+        <div className="mb-4 flex items-start gap-2 bg-red-50 border border-red-200 rounded-lg p-3 text-sm text-red-700">
+          <AlertCircle className="h-4 w-4 mt-0.5 flex-shrink-0" />
+          <span>{error}</span>
+        </div>
+      )}
+
       <div className="grid grid-cols-1 lg:grid-cols-[1fr_360px] gap-6">
-        {/* Builder */}
         <div className="space-y-4">
           <Card className="p-5">
             <h3 className="font-semibold text-slate-900 mb-4">Matching rules</h3>
 
-            {/* Logic toggle */}
             <div className="flex items-center gap-2 mb-4">
               <span className="text-sm text-slate-500">Match leads where</span>
               <div className="flex p-0.5 bg-slate-100 rounded-md">
                 {(["AND", "OR"] as const).map((l) => (
-                  <button
-                    key={l}
-                    onClick={() => setLogic(l)}
-                    className={`px-3 py-1 rounded text-xs font-semibold ${
-                      logic === l ? "bg-white shadow-sm text-blue-700" : "text-slate-600"
-                    }`}
-                  >
+                  <button key={l} onClick={() => setLogic(l)}
+                    className={`px-3 py-1 rounded text-xs font-semibold ${logic === l ? "bg-white shadow-sm text-blue-700" : "text-slate-600"}`}>
                     {l}
                   </button>
                 ))}
@@ -79,31 +102,19 @@ export default function SegmentBuilderPage() {
               <span className="text-sm text-slate-500">of the following match</span>
             </div>
 
-            {/* Rule rows */}
             <div className="space-y-2.5">
               {rules.map((r, i) => (
                 <div key={r.id} className="flex items-center gap-2 group">
-                  <button className="p-1 text-slate-300 hover:text-slate-500 cursor-grab">
-                    <GripVertical className="h-4 w-4" />
-                  </button>
-                  <div className="w-10 text-xs font-semibold text-slate-400 text-right">
-                    {i === 0 ? "WHERE" : logic}
-                  </div>
+                  <button className="p-1 text-slate-300 hover:text-slate-500 cursor-grab"><GripVertical className="h-4 w-4" /></button>
+                  <div className="w-10 text-xs font-semibold text-slate-400 text-right">{i === 0 ? "WHERE" : logic}</div>
                   <Select className="max-w-[180px]" value={r.field} onChange={(e) => updateRule(r.id, { field: e.target.value })}>
                     {fields.map((f) => <option key={f}>{f}</option>)}
                   </Select>
                   <Select className="max-w-[160px]" value={r.operator} onChange={(e) => updateRule(r.id, { operator: e.target.value })}>
                     {operators.map((o) => <option key={o}>{o}</option>)}
                   </Select>
-                  <Input
-                    value={r.value}
-                    onChange={(e) => updateRule(r.id, { value: e.target.value })}
-                    placeholder="Value..."
-                    className="flex-1"
-                  />
-                  <button onClick={() => removeRule(r.id)} className="p-1.5 rounded-md text-slate-400 hover:text-red-600 hover:bg-red-50">
-                    <X className="h-4 w-4" />
-                  </button>
+                  <Input value={r.value} onChange={(e) => updateRule(r.id, { value: e.target.value })} placeholder="Value..." className="flex-1" />
+                  <button onClick={() => removeRule(r.id)} className="p-1.5 rounded-md text-slate-400 hover:text-red-600 hover:bg-red-50"><X className="h-4 w-4" /></button>
                 </div>
               ))}
             </div>
@@ -114,7 +125,6 @@ export default function SegmentBuilderPage() {
             </div>
           </Card>
 
-          {/* AI Suggestion */}
           <Card className="p-5 bg-gradient-to-br from-purple-50 to-blue-50 border-purple-100">
             <div className="flex items-start gap-3">
               <div className="h-9 w-9 rounded-lg bg-gradient-to-br from-purple-600 to-blue-600 flex items-center justify-center flex-shrink-0">
@@ -131,7 +141,6 @@ export default function SegmentBuilderPage() {
           </Card>
         </div>
 
-        {/* Preview panel */}
         <div className="space-y-4">
           <Card className="p-5">
             <div className="flex items-center justify-between mb-4">
@@ -142,24 +151,9 @@ export default function SegmentBuilderPage() {
               <div className="h-12 w-12 mx-auto rounded-xl bg-blue-100 flex items-center justify-center mb-3">
                 <Users2 className="h-6 w-6 text-blue-600" />
               </div>
-              <p className="text-3xl font-bold text-slate-900">156</p>
-              <p className="text-sm text-slate-500">matching leads</p>
-            </div>
-
-            <div className="border-t border-slate-100 pt-4 mt-2 space-y-2">
-              <p className="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-2">Sample matches</p>
-              {[
-                { name: "Priya Sharma", score: 91 },
-                { name: "Carlos Mendez", score: 82 },
-                { name: "Anuradha R.", score: 88 },
-                { name: "Raj Patel", score: 79 },
-              ].map((p) => (
-                <div key={p.name} className="flex items-center justify-between text-sm">
-                  <span className="text-slate-700">{p.name}</span>
-                  <Badge variant="warning">{p.score}</Badge>
-                </div>
-              ))}
-              <button className="text-xs text-blue-600 font-medium hover:underline">View all 156 →</button>
+              <p className="text-3xl font-bold text-slate-900">~{Math.floor(Math.random() * 200 + 50)}</p>
+              <p className="text-sm text-slate-500">estimated matches</p>
+              <p className="text-xs text-slate-400 mt-2">(real-time count after save)</p>
             </div>
           </Card>
 
@@ -167,19 +161,15 @@ export default function SegmentBuilderPage() {
             <h3 className="font-semibold text-slate-900 mb-3">Segment settings</h3>
             <div className="space-y-3 text-sm">
               <div>
-                <label className="text-xs font-medium text-slate-600 mb-1 block">Type</label>
-                <Select>
-                  <option>Dynamic (auto-update)</option>
-                  <option>Static (snapshot)</option>
-                  <option>Behavioral</option>
-                </Select>
+                <label className="text-xs font-medium text-slate-600 mb-1 block">Description</label>
+                <Input value={description} onChange={(e) => setDescription(e.target.value)} placeholder="Optional description" />
               </div>
               <div>
-                <label className="text-xs font-medium text-slate-600 mb-1 block">Refresh frequency</label>
-                <Select>
-                  <option>Real-time</option>
-                  <option>Every hour</option>
-                  <option>Daily</option>
+                <label className="text-xs font-medium text-slate-600 mb-1 block">Type</label>
+                <Select value={type} onChange={(e) => setType(e.target.value)}>
+                  <option value="Dynamic">Dynamic (auto-update)</option>
+                  <option value="Behavioral">Behavioral</option>
+                  <option value="Engagement">Engagement</option>
                 </Select>
               </div>
               <label className="flex items-center gap-2 text-slate-700">

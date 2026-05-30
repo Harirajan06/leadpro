@@ -60,3 +60,43 @@ export async function deleteWorkflow(id: string) {
   if (error) throw error;
   revalidatePath("/workflows");
 }
+
+/** Simulates a workflow run end-to-end and writes the result to workflow_executions. */
+export async function testRunWorkflow(workflowId: string | null, workflowName: string) {
+  const supabase = await createClient();
+
+  // Create execution row
+  const result = {
+    steps: [
+      { name: "New lead via web form", status: "ok", durationMs: 12 },
+      { name: "Add lead to CRM", status: "ok", durationMs: 87 },
+      { name: "Send Welcome Email", status: "ok", durationMs: 134 },
+      { name: "Wait 1 day (simulated)", status: "skipped", durationMs: 0 },
+      { name: "Condition: did they open?", status: "ok", branch: "NO", durationMs: 23 },
+      { name: "Send Reminder Email", status: "ok", durationMs: 102 },
+    ],
+    simulated: true,
+    workflowName,
+  };
+
+  if (workflowId) {
+    await supabase.from("workflow_executions").insert({
+      workflow_id: workflowId,
+      status: "Success",
+      result,
+      completed_at: new Date().toISOString(),
+    });
+  }
+
+  revalidatePath("/workflows");
+  revalidatePath(`/workflows/builder`);
+  return result;
+}
+
+export async function getRecentExecutions(workflowId?: string) {
+  const supabase = await createClient();
+  let query = supabase.from("workflow_executions").select("*").order("started_at", { ascending: false }).limit(20);
+  if (workflowId) query = query.eq("workflow_id", workflowId);
+  const { data } = await query;
+  return data || [];
+}

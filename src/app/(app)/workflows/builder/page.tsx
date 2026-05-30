@@ -8,7 +8,7 @@ import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Tabs } from "@/components/ui/tabs";
-import { createWorkflow } from "@/lib/queries/workflows";
+import { createWorkflow, testRunWorkflow } from "@/lib/queries/workflows";
 
 const palette = [
   { group: "Triggers", color: "border-emerald-200 bg-emerald-50 text-emerald-700", items: [
@@ -72,6 +72,21 @@ export default function WorkflowBuilderPage() {
   const [description, setDescription] = useState("Triggered when new lead submits website form");
   const [folder, setFolder] = useState("Lead Generation");
   const [error, setError] = useState<string | null>(null);
+  const [testResult, setTestResult] = useState<{ steps: { name: string; status: string; durationMs: number; branch?: string }[] } | null>(null);
+
+  function handleTest() {
+    setError(null);
+    setTestResult(null);
+    start(async () => {
+      try {
+        const result = await testRunWorkflow(null, name);
+        setTestResult(result);
+        setTab("logs");
+      } catch (err) {
+        setError(err instanceof Error ? err.message : "Test failed");
+      }
+    });
+  }
 
   function handleSave(status: "Draft" | "Active") {
     setError(null);
@@ -99,7 +114,7 @@ export default function WorkflowBuilderPage() {
           </div>
         </div>
         <div className="flex items-center gap-2">
-          <Button variant="outline">Test automation</Button>
+          <Button variant="outline" onClick={handleTest} disabled={pending}>Test automation</Button>
           <Button variant="outline" onClick={() => handleSave("Draft")} disabled={pending}><Save className="h-4 w-4" /> Save</Button>
           <Button onClick={() => handleSave("Active")} disabled={pending}><Play className="h-4 w-4" /> {pending ? "Activating..." : "Activate"}</Button>
         </div>
@@ -200,12 +215,28 @@ export default function WorkflowBuilderPage() {
 
       {tab === "logs" && (
         <Card>
-          <div className="p-4 border-b border-slate-100">
+          <div className="p-4 border-b border-slate-100 flex items-center justify-between">
             <h3 className="font-semibold text-slate-900">Execution logs</h3>
+            <Button variant="outline" size="sm" onClick={handleTest} disabled={pending}>Run test again</Button>
           </div>
-          <div className="p-12 text-center text-slate-500 text-sm">
-            No executions yet. Logs will appear after workflow runs.
-          </div>
+          {testResult ? (
+            <ul className="divide-y divide-slate-100">
+              {testResult.steps.map((s, i) => (
+                <li key={i} className="p-4 flex items-center gap-3">
+                  <span className={`h-2 w-2 rounded-full flex-shrink-0 ${s.status === "ok" ? "bg-emerald-500" : "bg-slate-300"}`} />
+                  <div className="flex-1">
+                    <p className="text-sm text-slate-900">{s.name}{s.branch ? ` (branch: ${s.branch})` : ""}</p>
+                    <p className="text-xs text-slate-500">{s.durationMs}ms · {s.status}</p>
+                  </div>
+                  <Badge variant={s.status === "ok" ? "success" : "default"}>{s.status === "ok" ? "Success" : "Skipped"}</Badge>
+                </li>
+              ))}
+            </ul>
+          ) : (
+            <div className="p-12 text-center text-slate-500 text-sm">
+              Click <strong>Test automation</strong> to simulate a run.
+            </div>
+          )}
         </Card>
       )}
     </div>

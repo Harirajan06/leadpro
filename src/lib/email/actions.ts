@@ -2,6 +2,7 @@
 import { createClient } from "@/lib/supabase/server";
 import { sendEmail, emailConfigured, emailDomainVerified } from "./resend";
 import { getLeadById } from "@/lib/queries/leads";
+import { isBlocked } from "@/lib/queries/blocklist";
 import { revalidatePath } from "next/cache";
 
 export async function getEmailStatus() {
@@ -22,6 +23,10 @@ export async function sendLeadEmail(leadId: string, subject: string, body: strin
   const lead = await getLeadById(leadId);
   if (!lead) return { ok: false, error: "Lead not found" };
   if (!lead.email) return { ok: false, error: "This lead has no email address" };
+
+  if (await isBlocked(lead.email)) {
+    return { ok: false, error: "This recipient is on your blocklist" };
+  }
 
   const result = await sendEmail({
     to: lead.email,

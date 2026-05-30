@@ -2,15 +2,42 @@
 import { useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { Mail, Lock, Eye, EyeOff } from "lucide-react";
+import { Mail, Lock, Eye, EyeOff, AlertCircle } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
+import { createClient } from "@/lib/supabase/client";
 
 export default function LoginPage() {
   const router = useRouter();
   const [showPass, setShowPass] = useState(false);
   const [form, setForm] = useState({ email: "", password: "" });
+  const [error, setError] = useState<string | null>(null);
+  const [loading, setLoading] = useState(false);
+
   const valid = form.email.includes("@") && form.password.length >= 6;
+
+  async function handleSubmit(e: React.FormEvent) {
+    e.preventDefault();
+    if (!valid) return;
+    setError(null);
+    setLoading(true);
+
+    const supabase = createClient();
+    const { error: loginError } = await supabase.auth.signInWithPassword({
+      email: form.email,
+      password: form.password,
+    });
+
+    setLoading(false);
+
+    if (loginError) {
+      setError(loginError.message);
+      return;
+    }
+
+    router.push("/dashboard");
+    router.refresh();
+  }
 
   return (
     <div>
@@ -19,13 +46,14 @@ export default function LoginPage() {
         <p className="text-slate-500">Log in to your LeadPro workspace.</p>
       </div>
 
-      <form
-        onSubmit={(e) => {
-          e.preventDefault();
-          if (valid) router.push(`/verify-otp?email=${encodeURIComponent(form.email)}`);
-        }}
-        className="space-y-4"
-      >
+      <form onSubmit={handleSubmit} className="space-y-4">
+        {error && (
+          <div className="flex items-start gap-2 bg-red-50 border border-red-200 rounded-lg p-3 text-sm text-red-700">
+            <AlertCircle className="h-4 w-4 mt-0.5 flex-shrink-0" />
+            <span>{error}</span>
+          </div>
+        )}
+
         <div>
           <label className="block text-sm font-medium text-slate-700 mb-1.5">Email address</label>
           <Input
@@ -63,8 +91,8 @@ export default function LoginPage() {
           Remember me for 30 days
         </label>
 
-        <Button type="submit" size="lg" className="w-full" disabled={!valid}>
-          Continue
+        <Button type="submit" size="lg" className="w-full" disabled={!valid || loading}>
+          {loading ? "Signing in..." : "Continue"}
         </Button>
 
         <p className="text-center text-sm text-slate-500">

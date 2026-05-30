@@ -2,17 +2,48 @@
 import { useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { Mail, Lock, User, Eye, EyeOff, Check } from "lucide-react";
+import { Mail, Lock, User, Eye, EyeOff, Check, AlertCircle } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
+import { createClient } from "@/lib/supabase/client";
 
 export default function SignupPage() {
   const router = useRouter();
   const [showPass, setShowPass] = useState(false);
   const [form, setForm] = useState({ fullName: "", email: "", password: "" });
+  const [error, setError] = useState<string | null>(null);
+  const [loading, setLoading] = useState(false);
 
   const passOk = form.password.length >= 8;
   const valid = form.fullName && form.email.includes("@") && passOk;
+
+  async function handleSubmit(e: React.FormEvent) {
+    e.preventDefault();
+    if (!valid) return;
+    setError(null);
+    setLoading(true);
+
+    const supabase = createClient();
+    const { error: signupError } = await supabase.auth.signUp({
+      email: form.email,
+      password: form.password,
+      options: {
+        data: { full_name: form.fullName },
+        emailRedirectTo: `${window.location.origin}/dashboard`,
+      },
+    });
+
+    setLoading(false);
+
+    if (signupError) {
+      setError(signupError.message);
+      return;
+    }
+
+    // Trigger OTP for email verification
+    await supabase.auth.signInWithOtp({ email: form.email });
+    router.push(`/verify-otp?email=${encodeURIComponent(form.email)}`);
+  }
 
   return (
     <div>
@@ -21,13 +52,14 @@ export default function SignupPage() {
         <p className="text-slate-500">Start nurturing leads with AI in minutes.</p>
       </div>
 
-      <form
-        onSubmit={(e) => {
-          e.preventDefault();
-          if (valid) router.push(`/verify-otp?email=${encodeURIComponent(form.email)}`);
-        }}
-        className="space-y-4"
-      >
+      <form onSubmit={handleSubmit} className="space-y-4">
+        {error && (
+          <div className="flex items-start gap-2 bg-red-50 border border-red-200 rounded-lg p-3 text-sm text-red-700">
+            <AlertCircle className="h-4 w-4 mt-0.5 flex-shrink-0" />
+            <span>{error}</span>
+          </div>
+        )}
+
         <div>
           <label className="block text-sm font-medium text-slate-700 mb-1.5">Full name</label>
           <Input
@@ -74,8 +106,8 @@ export default function SignupPage() {
           </ul>
         </div>
 
-        <Button type="submit" size="lg" className="w-full" disabled={!valid}>
-          Continue
+        <Button type="submit" size="lg" className="w-full" disabled={!valid || loading}>
+          {loading ? "Creating account..." : "Continue"}
         </Button>
 
         <p className="text-center text-sm text-slate-500">

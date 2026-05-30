@@ -2,12 +2,13 @@
 import { useState, useTransition } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { ArrowLeft, Save, Send, Sparkles, Image, Link as LinkIcon, Type, Code, Calendar, Megaphone, PartyPopper, Mail, Plus, Clock, RefreshCw, Edit3, AlertCircle } from "lucide-react";
+import { ArrowLeft, Save, Send, Sparkles, Image, Link as LinkIcon, Type, Code, Calendar, Megaphone, PartyPopper, Mail, Plus, Clock, RefreshCw, Edit3, AlertCircle, Loader2 } from "lucide-react";
 import { Input, Select, Textarea } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { createCampaign } from "@/lib/queries/campaigns";
+import { generateEmailSequence, type GeneratedEmail } from "@/lib/ai/actions";
 
 const suggestions = [
   { icon: <Calendar className="h-4 w-4" />, label: "Book demo meetings", color: "bg-blue-50 text-blue-700 hover:bg-blue-100" },
@@ -23,6 +24,26 @@ export default function CampaignBuilderPage() {
   const [name, setName] = useState("Untitled Campaign");
   const [prompt, setPrompt] = useState("");
   const [error, setError] = useState<string | null>(null);
+  const [generating, setGenerating] = useState(false);
+  const [sequence, setSequence] = useState<GeneratedEmail[]>([
+    { day: "Day 1", subject: "Quick question — 15 min for a demo?", body: "Hi {{firstName}}, I noticed {{companyName}} is in {{industry}}. We've helped similar companies cut prospecting time by 60%..." },
+    { day: "Day 3", subject: "Following up — saw your recent post on AI", body: "Hi {{firstName}}, I came across your recent post about AI transformation and wanted to share a quick case study..." },
+    { day: "Day 7", subject: "Last note from me", body: "Hi {{firstName}}, I'll keep this brief. If AI-driven lead nurturing isn't a priority right now, no worries..." },
+  ]);
+
+  async function handleGenerate() {
+    if (!prompt.trim()) { setError("Describe your campaign goal first"); return; }
+    setError(null);
+    setGenerating(true);
+    try {
+      const emails = await generateEmailSequence(prompt.trim());
+      if (emails.length) setSequence(emails);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "AI generation failed");
+    } finally {
+      setGenerating(false);
+    }
+  }
 
   function handleSave(status: "Draft" | "Active") {
     setError(null);
@@ -158,39 +179,51 @@ export default function CampaignBuilderPage() {
             </div>
 
             <div className="flex items-center justify-end mt-4">
-              <Button type="button" disabled><Sparkles className="h-4 w-4" /> Generate sequence (requires OpenAI key)</Button>
+              <Button type="button" onClick={handleGenerate} disabled={generating}>
+                {generating ? <><Loader2 className="h-4 w-4 animate-spin" /> Generating...</> : <><Sparkles className="h-4 w-4" /> Generate sequence</>}
+              </Button>
             </div>
           </Card>
 
           <div>
             <div className="flex items-center justify-between mb-3">
               <h3 className="font-semibold text-slate-900">Email sequence</h3>
-              <Button variant="outline" size="sm" disabled><RefreshCw className="h-3.5 w-3.5" /> Regenerate all</Button>
+              <Button variant="outline" size="sm" onClick={handleGenerate} disabled={generating}>
+                {generating ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <RefreshCw className="h-3.5 w-3.5" />} Regenerate all
+              </Button>
             </div>
 
             <div className="space-y-3">
-              {[
-                { day: "Day 1", subject: "Quick question — 15 min for a demo?", body: "Hi {{firstName}}, I noticed {{companyName}} is in {{industry}}. We've helped similar companies cut prospecting time by 60%...", color: "bg-blue-500" },
-                { day: "Day 3", subject: "Following up — saw your recent post on AI", body: "Hi {{firstName}}, I came across your recent post about AI transformation and wanted to share a quick case study...", color: "bg-purple-500" },
-                { day: "Day 7", subject: "Last note from me", body: "Hi {{firstName}}, I'll keep this brief. If AI-driven lead nurturing isn't a priority right now, no worries...", color: "bg-amber-500" },
-              ].map((s, i) => (
-                <Card key={i} className="p-4 hover:shadow-md transition-shadow">
-                  <div className="flex items-start gap-3">
-                    <div className={`h-9 w-9 rounded-full ${s.color} text-white flex items-center justify-center flex-shrink-0`}><Mail className="h-4 w-4" /></div>
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center gap-2 mb-2 flex-wrap">
-                        <span className="text-xs font-semibold text-slate-500 inline-flex items-center gap-1"><Clock className="h-3 w-3" /> {s.day}</span>
-                        <Badge variant="purple"><Sparkles className="h-2.5 w-2.5" /> AI</Badge>
+              {sequence.map((s, i) => {
+                const colors = ["bg-blue-500", "bg-purple-500", "bg-amber-500", "bg-emerald-500", "bg-pink-500"];
+                return (
+                  <Card key={i} className="p-4 hover:shadow-md transition-shadow">
+                    <div className="flex items-start gap-3">
+                      <div className={`h-9 w-9 rounded-full ${colors[i % colors.length]} text-white flex items-center justify-center flex-shrink-0`}><Mail className="h-4 w-4" /></div>
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-2 mb-2 flex-wrap">
+                          <span className="text-xs font-semibold text-slate-500 inline-flex items-center gap-1"><Clock className="h-3 w-3" /> {s.day}</span>
+                          <Badge variant="purple"><Sparkles className="h-2.5 w-2.5" /> AI</Badge>
+                        </div>
+                        <Input
+                          value={s.subject}
+                          onChange={(e) => setSequence(sequence.map((x, j) => j === i ? { ...x, subject: e.target.value } : x))}
+                          className="font-medium mb-2 bg-slate-50"
+                        />
+                        <Textarea
+                          value={s.body}
+                          onChange={(e) => setSequence(sequence.map((x, j) => j === i ? { ...x, body: e.target.value } : x))}
+                          rows={3}
+                          className="bg-slate-50 text-sm"
+                        />
                       </div>
-                      <Input value={s.subject} readOnly className="font-medium mb-2 bg-slate-50" />
-                      <Textarea value={s.body} readOnly rows={2} className="bg-slate-50 text-sm" />
+                      <Button variant="ghost" size="icon"><Edit3 className="h-4 w-4" /></Button>
                     </div>
-                    <Button variant="ghost" size="icon"><Edit3 className="h-4 w-4" /></Button>
-                  </div>
-                </Card>
-              ))}
+                  </Card>
+                );
+              })}
 
-              <Button variant="outline" className="w-full"><Plus className="h-4 w-4" /> Add step</Button>
+              <Button variant="outline" className="w-full" onClick={() => setSequence([...sequence, { day: `Day ${sequence.length * 3}`, subject: "", body: "" }])}><Plus className="h-4 w-4" /> Add step</Button>
             </div>
           </div>
         </div>

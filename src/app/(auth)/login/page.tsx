@@ -1,18 +1,26 @@
 "use client";
-import { useState } from "react";
+import { useState, useEffect, Suspense } from "react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { Mail, Lock, Eye, EyeOff, AlertCircle } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { createClient } from "@/lib/supabase/client";
 
-export default function LoginPage() {
+function LoginForm() {
   const router = useRouter();
+  const params = useSearchParams();
   const [showPass, setShowPass] = useState(false);
   const [form, setForm] = useState({ email: "", password: "" });
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+
+  useEffect(() => {
+    const e = params.get("error");
+    if (e) {
+      setError(e === "invalid_link" ? "Your sign-in link is invalid or expired. Please log in again." : e);
+    }
+  }, [params]);
 
   const valid = form.email.includes("@") && form.password.length >= 6;
 
@@ -103,5 +111,13 @@ export default function LoginPage() {
         </p>
       </form>
     </div>
+  );
+}
+
+export default function LoginPage() {
+  return (
+    <Suspense fallback={<div className="text-sm text-slate-500">Loading...</div>}>
+      <LoginForm />
+    </Suspense>
   );
 }

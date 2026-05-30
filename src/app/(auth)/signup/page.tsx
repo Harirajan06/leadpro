@@ -29,7 +29,7 @@ export default function SignupPage() {
       password: form.password,
       options: {
         data: { full_name: form.fullName },
-        emailRedirectTo: `${window.location.origin}/dashboard`,
+        emailRedirectTo: `${window.location.origin}/auth/callback?next=/dashboard`,
       },
     });
 
@@ -40,9 +40,7 @@ export default function SignupPage() {
       return;
     }
 
-    // Trigger OTP for email verification
-    await supabase.auth.signInWithOtp({ email: form.email });
-    router.push(`/verify-otp?email=${encodeURIComponent(form.email)}`);
+    router.push(`/check-email?email=${encodeURIComponent(form.email)}`);
   }
 
   return (

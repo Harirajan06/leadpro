@@ -115,6 +115,111 @@ Return JSON:
 }
 
 // ============================================================================
+// AI Contact Intelligence — likely decision-makers + strategy (estimates)
+// ============================================================================
+export interface AiContact {
+  name: string;
+  role: string;
+  priority: "Primary" | "Secondary";
+  insight: string;
+  strategy: string;
+  confidence: number;
+}
+
+export async function generateContactIntel(leadId: string): Promise<AiContact[]> {
+  const lead = await getLeadById(leadId);
+  if (!lead) throw new Error("Lead not found");
+
+  const system = `You are a B2B sales-research assistant. Suggest the likely key decision-makers (by ROLE) to target at a company, with engagement strategy. Use realistic placeholder names clearly understood as suggestions, NOT verified real people. Return ONLY valid JSON.`;
+
+  const prompt = `For "${lead.company_name || "this company"}" in the ${lead.industry || "technology"} industry selling ${lead.interest_area || "a B2B SaaS solution"}, list the 3-4 most important roles to target.
+
+Return JSON:
+{
+  "contacts": [
+    { "name": "First Last (suggested)", "role": "e.g. Chief Revenue Officer", "priority": "Primary|Secondary", "insight": "why this role matters", "strategy": "how to engage them", "confidence": 70 }
+  ]
+}`;
+
+  const result = await aiJson<{ contacts: AiContact[] }>({ system, prompt, temperature: 0.6 });
+  return result.contacts || [];
+}
+
+// ============================================================================
+// AI Outreach Sequence — personalized to a specific lead
+// ============================================================================
+export async function generateLeadOutreach(leadId: string): Promise<GeneratedEmail[]> {
+  const lead = await getLeadById(leadId);
+  if (!lead) throw new Error("Lead not found");
+
+  const system = `You are an expert B2B sales copywriter. Write a short, highly personalized multi-step cold email sequence for ONE specific prospect. Keep each email under 110 words. Reference their company and interest area. Use {{firstName}} for the name. Return ONLY valid JSON.`;
+
+  const prompt = `Write a 4-step outreach sequence for:
+- Name: ${lead.full_name || "(decision maker)"}
+- Company: ${lead.company_name || "unknown"}
+- Industry: ${lead.industry || "unknown"}
+- Interest: ${lead.interest_area || "unknown"}
+- Source: ${lead.source || "unknown"}
+
+Return JSON:
+{
+  "emails": [
+    { "day": "Day 1", "subject": "...", "body": "..." },
+    { "day": "Day 3", "subject": "...", "body": "..." },
+    { "day": "Day 5", "subject": "...", "body": "..." },
+    { "day": "Day 8", "subject": "...", "body": "..." }
+  ]
+}`;
+
+  const result = await aiJson<{ emails: GeneratedEmail[] }>({ system, prompt, temperature: 0.8 });
+  return result.emails || [];
+}
+
+// ============================================================================
+// AI Next Steps — richer prioritized recommendations
+// ============================================================================
+export interface AiNextStep {
+  priority: "Now" | "This week" | "Next 2 weeks" | "Watch";
+  title: string;
+  description: string;
+  impact: "High" | "Medium" | "Low";
+}
+
+export interface AiNextStepsResult {
+  steps: AiNextStep[];
+  decisionTimeline: string;
+  bestContactWindow: string;
+  likelyDealSize: string;
+}
+
+export async function generateNextSteps(leadId: string): Promise<AiNextStepsResult> {
+  const lead = await getLeadById(leadId);
+  if (!lead) throw new Error("Lead not found");
+
+  const system = `You are an AI sales strategist. Give prioritized, specific next actions for a sales rep working a lead, plus timing estimates. Return ONLY valid JSON.`;
+
+  const prompt = `Recommend next steps for this lead:
+- Name: ${lead.full_name || "(company lead)"}
+- Company: ${lead.company_name || "unknown"}
+- Industry: ${lead.industry || "unknown"}
+- Interest: ${lead.interest_area || "unknown"}
+- Status: ${lead.status}
+- Engagement score: ${lead.lead_score}/100
+
+Return JSON:
+{
+  "steps": [
+    { "priority": "Now|This week|Next 2 weeks|Watch", "title": "short action title", "description": "1 sentence detail", "impact": "High|Medium|Low" }
+  ],
+  "decisionTimeline": "e.g. 30-45 days",
+  "bestContactWindow": "e.g. Tue-Thu, 10am-12pm",
+  "likelyDealSize": "e.g. $40k-$70k ARR"
+}`;
+
+  return aiJson<AiNextStepsResult>({ system, prompt, temperature: 0.6 });
+}
+
+// ============================================================================
 // Single email regeneration / improvement
 // ============================================================================
 export async function improveEmail(currentBody: string, instruction: string): Promise<string> {

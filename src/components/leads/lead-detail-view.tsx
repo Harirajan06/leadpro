@@ -136,10 +136,10 @@ export function LeadDetailView({ lead, activities }: { lead: LeadRow; activities
           />
 
           {tab === "score" && <ProspectScoreTab leadId={lead.id} />}
-          {tab === "company" && <CompanyIntelTab />}
-          {tab === "contacts" && <ContactIntelTab />}
-          {tab === "outreach" && <OutreachTab />}
-          {tab === "next" && <NextStepsTab />}
+          {tab === "company" && <CompanyIntelTab leadId={lead.id} />}
+          {tab === "contacts" && <ContactIntelTab leadId={lead.id} />}
+          {tab === "outreach" && <OutreachTab leadId={lead.id} />}
+          {tab === "next" && <NextStepsTab leadId={lead.id} />}
         </div>
 
         {/* Activity timeline */}

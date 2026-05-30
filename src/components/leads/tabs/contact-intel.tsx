@@ -1,56 +1,62 @@
-import { Mail, Globe, Phone, Star } from "lucide-react";
+"use client";
+import { useState } from "react";
+import { Mail, Globe, Phone, Star, Users, Sparkles, Loader2, AlertCircle, Info } from "lucide-react";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { generateContactIntel, type AiContact } from "@/lib/ai/actions";
 
-const contacts = [
-  {
-    name: "Daniel Wright",
-    role: "CEO & Co-founder",
-    priority: "Primary",
-    insight: "Public proponent of AI transformation. Recently spoke at SAP Sapphire about automation ROI.",
-    strategy: "Lead with strategic vision and ROI metrics. Avoid feature lists.",
-    email: "daniel.w@visionary-ai.com",
-    confidence: 95,
-  },
-  {
-    name: "Linh Tran",
-    role: "Chief Revenue Officer",
-    priority: "Primary",
-    insight: "Owns revenue tooling stack. Tracks pipeline ROI personally.",
-    strategy: "Lead with quantifiable revenue impact and case studies from similar Series B companies.",
-    email: "linh.t@visionary-ai.com",
-    confidence: 91,
-  },
-  {
-    name: "Marcus Webb",
-    role: "Chief Operating Officer",
-    priority: "Secondary",
-    insight: "Operations focus, recently hired VP of Sales Ops who is evaluating tools.",
-    strategy: "Influence through VP Sales Ops. Forward technical specs and integration docs.",
-    email: "marcus.w@visionary-ai.com",
-    confidence: 78,
-  },
-  {
-    name: "Sofia Reyes",
-    role: "Chief Marketing Officer",
-    priority: "Secondary",
-    insight: "Recently posted about AI-driven content personalization on LinkedIn.",
-    strategy: "Share AI personalization case study. Position as marketing-sales alignment tool.",
-    email: "sofia.r@visionary-ai.com",
-    confidence: 82,
-  },
-];
+export function ContactIntelTab({ leadId }: { leadId: string }) {
+  const [contacts, setContacts] = useState<AiContact[] | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
-export function ContactIntelTab() {
+  async function run() {
+    setLoading(true);
+    setError(null);
+    try {
+      setContacts(await generateContactIntel(leadId));
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed");
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  if (!contacts) {
+    return (
+      <Card className="p-8 text-center">
+        <div className="h-12 w-12 mx-auto rounded-xl bg-gradient-to-br from-purple-600 to-pink-600 flex items-center justify-center mb-4">
+          <Users className="h-6 w-6 text-white" />
+        </div>
+        <h3 className="font-semibold text-slate-900 mb-1">Contact Intelligence</h3>
+        <p className="text-sm text-slate-500 mb-5 max-w-md mx-auto">
+          Let AI suggest the key decision-maker roles to target and how to engage each one.
+        </p>
+        {error && <div className="flex items-center justify-center gap-2 text-sm text-red-600 mb-4"><AlertCircle className="h-4 w-4" /> {error}</div>}
+        <Button onClick={run} disabled={loading}>
+          {loading ? <><Loader2 className="h-4 w-4 animate-spin" /> Finding contacts...</> : <><Sparkles className="h-4 w-4" /> Suggest Contacts</>}
+        </Button>
+      </Card>
+    );
+  }
+
   return (
     <div className="space-y-4">
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-2 text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2 flex-1">
+          <Info className="h-3.5 w-3.5 flex-shrink-0" />
+          AI-suggested roles — connect a data provider (Apollo, Hunter) for verified contacts.
+        </div>
+        <Button variant="outline" size="sm" onClick={run} disabled={loading} className="ml-3">{loading ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : "Re-run"}</Button>
+      </div>
+
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-        {contacts.map((c) => (
-          <Card key={c.name} className="p-5 hover:shadow-md transition-shadow">
+        {contacts.map((c, i) => (
+          <Card key={i} className="p-5 hover:shadow-md transition-shadow">
             <div className="flex items-start gap-3 mb-3">
               <div className="h-11 w-11 rounded-full bg-gradient-to-br from-purple-500 to-pink-500 text-white text-sm font-bold flex items-center justify-center flex-shrink-0">
-                {c.name.split(" ").map((p) => p[0]).join("")}
+                {c.name.split(" ").map((p) => p[0]).join("").slice(0, 2).toUpperCase()}
               </div>
               <div className="flex-1 min-w-0">
                 <div className="flex items-center gap-2 mb-0.5">
@@ -78,7 +84,7 @@ export function ContactIntelTab() {
 
             <div className="flex items-center justify-between mt-4 pt-4 border-t border-slate-100">
               <div className="flex items-center gap-1.5 text-xs text-slate-500">
-                <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" /> Email verified · {c.confidence}% confidence
+                <span className="h-1.5 w-1.5 rounded-full bg-amber-500" /> {c.confidence}% confidence
               </div>
               <div className="flex items-center gap-1">
                 <Button variant="ghost" size="icon" title="Email"><Mail className="h-4 w-4" /></Button>

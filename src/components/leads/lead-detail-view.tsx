@@ -11,6 +11,7 @@ import { CompanyIntelTab } from "@/components/leads/tabs/company-intel";
 import { ContactIntelTab } from "@/components/leads/tabs/contact-intel";
 import { OutreachTab } from "@/components/leads/tabs/outreach";
 import { NextStepsTab } from "@/components/leads/tabs/next-steps";
+import { SendEmailModal } from "@/components/leads/send-email-modal";
 import type { LeadRow } from "@/lib/queries/leads";
 
 interface Activity {
@@ -45,6 +46,7 @@ function relativeTime(iso: string): string {
 
 export function LeadDetailView({ lead, activities }: { lead: LeadRow; activities: Activity[] }) {
   const [tab, setTab] = useState("score");
+  const [emailOpen, setEmailOpen] = useState(false);
   const displayName = lead.full_name || lead.company_name || "—";
   const initials = displayName.split(" ").map((p) => p[0]).join("").slice(0, 2).toUpperCase();
 
@@ -111,7 +113,7 @@ export function LeadDetailView({ lead, activities }: { lead: LeadRow; activities
             </div>
 
             <div className="flex flex-col gap-2">
-              <Button><Send className="h-4 w-4" /> Send Email</Button>
+              <Button onClick={() => setEmailOpen(true)}><Send className="h-4 w-4" /> Send Email</Button>
               <Button variant="outline"><Calendar className="h-4 w-4" /> Schedule Call</Button>
               <Button variant="ghost" size="icon" className="self-end"><MoreHorizontal className="h-4 w-4" /></Button>
             </div>
@@ -194,6 +196,14 @@ export function LeadDetailView({ lead, activities }: { lead: LeadRow; activities
           </Card>
         </div>
       </div>
+
+      <SendEmailModal
+        open={emailOpen}
+        onClose={() => setEmailOpen(false)}
+        leadId={lead.id}
+        leadEmail={lead.email}
+        leadName={displayName}
+      />
     </div>
   );
 }

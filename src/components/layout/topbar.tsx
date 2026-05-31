@@ -1,9 +1,12 @@
 "use client";
 import { useState, useEffect, useRef } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { Search, Bell, Plus, ChevronDown, LogOut, User as UserIcon, Settings } from "lucide-react";
+import { Search, ChevronDown, LogOut, User as UserIcon, Settings } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { createClient } from "@/lib/supabase/client";
+import { CreateMenu } from "@/components/layout/create-menu";
+import { NotificationsBell } from "@/components/layout/notifications-bell";
 
 interface TopbarProps {
   userName?: string;
@@ -43,16 +46,9 @@ export function Topbar({ userName = "Guest", userEmail = "", userRole = "User" }
       </div>
 
       <div className="flex items-center gap-2">
-        <button className="hidden md:inline-flex items-center gap-2 h-9 px-3 rounded-lg bg-blue-600 text-white text-sm font-medium hover:bg-blue-700 transition-colors">
-          <Plus className="h-4 w-4" />
-          Create
-          <ChevronDown className="h-3.5 w-3.5" />
-        </button>
+        <CreateMenu />
 
-        <button className="relative h-9 w-9 rounded-lg hover:bg-slate-100 flex items-center justify-center text-slate-600">
-          <Bell className="h-4.5 w-4.5" />
-          <span className="absolute top-1.5 right-1.5 h-2 w-2 rounded-full bg-red-500 ring-2 ring-white" />
-        </button>
+        <NotificationsBell />
 
         <div className="h-8 w-px bg-slate-200 mx-1" />
 
@@ -78,12 +74,20 @@ export function Topbar({ userName = "Guest", userEmail = "", userRole = "User" }
                 <p className="text-xs text-slate-500 truncate">{userEmail}</p>
               </div>
               <div className="p-1">
-                <button className="w-full flex items-center gap-2 px-3 py-2 rounded-lg text-sm text-slate-700 hover:bg-slate-50">
+                <Link
+                  href="/settings"
+                  onClick={() => setOpen(false)}
+                  className="w-full flex items-center gap-2 px-3 py-2 rounded-lg text-sm text-slate-700 hover:bg-slate-50"
+                >
                   <UserIcon className="h-4 w-4 text-slate-400" /> Profile
-                </button>
-                <button className="w-full flex items-center gap-2 px-3 py-2 rounded-lg text-sm text-slate-700 hover:bg-slate-50">
+                </Link>
+                <Link
+                  href="/settings"
+                  onClick={() => setOpen(false)}
+                  className="w-full flex items-center gap-2 px-3 py-2 rounded-lg text-sm text-slate-700 hover:bg-slate-50"
+                >
                   <Settings className="h-4 w-4 text-slate-400" /> Settings
-                </button>
+                </Link>
               </div>
               <div className="p-1 border-t border-slate-100">
                 <button

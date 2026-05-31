@@ -1,14 +1,17 @@
 "use client";
-import { useState, useTransition } from "react";
+import { useState, useTransition, useEffect, useRef } from "react";
 import Link from "next/link";
-import { Search, Plus, MoreHorizontal, Inbox, BarChart3, Mail, Pause, Play, Copy, Trash2 } from "lucide-react";
+import { useRouter } from "next/navigation";
+import { Search, Plus, MoreHorizontal, Inbox, BarChart3, Mail, Pause, Play, Copy, Trash2, Pencil, Download } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Card } from "@/components/ui/card";
 import { Tabs } from "@/components/ui/tabs";
 import { PageHeader } from "@/components/ui/page-header";
-import { setCampaignStatus, deleteCampaign, type CampaignRow } from "@/lib/queries/campaigns";
+import { setCampaignStatus, deleteCampaign, duplicateCampaign, type CampaignRow } from "@/lib/queries/campaigns";
+
+function todayStr() { const d = new window.Date(); return d.toISOString().slice(0,10); }
 
 const statusVariant: Record<string, "success" | "warning" | "default" | "blue"> = {
   Active: "success",
@@ -24,8 +27,22 @@ export function CampaignsView({ campaigns, stats }: {
   const [tab, setTab] = useState("sequences");
   const [pending, start] = useTransition();
   const [search, setSearch] = useState("");
+  const [openId, setOpenId] = useState<string | null>(null);
+  const menuRef = useRef<HTMLDivElement | null>(null);
+  const router = useRouter();
 
   const filtered = campaigns.filter((c) => !search || c.campaign_name.toLowerCase().includes(search.toLowerCase()));
+
+  useEffect(() => {
+    function onDocClick(e: MouseEvent) {
+      if (!openId) return;
+      if (menuRef.current && !menuRef.current.contains(e.target as Node)) {
+        setOpenId(null);
+      }
+    }
+    document.addEventListener("mousedown", onDocClick);
+    return () => document.removeEventListener("mousedown", onDocClick);
+  }, [openId]);
 
   function toggleStatus(c: CampaignRow) {
     start(async () => {
@@ -36,6 +53,33 @@ export function CampaignsView({ campaigns, stats }: {
     if (!confirm("Delete this campaign?")) return;
     start(async () => { await deleteCampaign(id); });
   }
+  function handleDuplicate(id: string) {
+    setOpenId(null);
+    start(async () => { await duplicateCampaign(id); });
+  }
+  function handleExport(c: CampaignRow) {
+    setOpenId(null);
+    const headers = ["Name", "Status", "Sent", "Open Rate", "Reply Rate", "Bounce Rate"];
+    const esc = (v: string) => `"${v.replace(/"/g, '""')}"`;
+    const row = [
+      esc(c.campaign_name),
+      esc(c.status),
+      String(c.sent_count ?? 0),
+      `${Number(c.open_rate || 0)}%`,
+      `${Number(c.reply_rate || 0)}%`,
+      `${Number(c.bounce_rate || 0)}%`,
+    ];
+    const csv = headers.map(esc).join(",") + "\n" + row.join(",") + "\n";
+    const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `campaign-${c.campaign_name.replace(/[^a-z0-9]+/gi, "-").toLowerCase()}-${todayStr()}.csv`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  }
 
   return (
     <div className="max-w-[1600px] mx-auto">
@@ -44,8 +88,8 @@ export function CampaignsView({ campaigns, stats }: {
         description="Manage AI-powered outbound email sequences"
         actions={
           <>
-            <Button variant="outline"><Inbox className="h-4 w-4" /> Inbox</Button>
-            <Button variant="outline"><BarChart3 className="h-4 w-4" /> Analytics</Button>
+            <Link href="/inbox"><Button variant="outline"><Inbox className="h-4 w-4" /> Inbox</Button></Link>
+            <Link href="/analytics"><Button variant="outline"><BarChart3 className="h-4 w-4" /> Analytics</Button></Link>
             <Link href="/campaigns/builder">
               <Button><Plus className="h-4 w-4" /> New Campaign</Button>
             </Link>
@@ -135,11 +179,51 @@ export function CampaignsView({ campaigns, stats }: {
                         ) : c.status === "Paused" ? (
                           <Button variant="ghost" size="icon" title="Resume" onClick={() => toggleStatus(c)} disabled={pending}><Play className="h-4 w-4" /></Button>
                         ) : null}
-                        <Button variant="ghost" size="icon" title="Duplicate"><Copy className="h-4 w-4" /></Button>
+                        <Button variant="ghost" size="icon" title="Duplicate" onClick={() => handleDuplicate(c.id)} disabled={pending}><Copy className="h-4 w-4" /></Button>
                         <button onClick={() => handleDelete(c.id)} className="p-1.5 rounded-md hover:bg-red-50 text-red-500 disabled:opacity-50" disabled={pending}>
                           <Trash2 className="h-4 w-4" />
                         </button>
-                        <button className="p-1.5 rounded-md hover:bg-slate-100"><MoreHorizontal className="h-4 w-4 text-slate-400" /></button>
+                        <div className="relative" ref={openId === c.id ? menuRef : undefined}>
+                          <button
+                            className="p-1.5 rounded-md hover:bg-slate-100"
+                            onClick={() => setOpenId(openId === c.id ? null : c.id)}
+                            aria-haspopup="menu"
+                            aria-expanded={openId === c.id}
+                          >
+                            <MoreHorizontal className="h-4 w-4 text-slate-400" />
+                          </button>
+                          {openId === c.id && (
+                            <div role="menu" className="absolute right-0 top-full mt-1 z-20 w-48 bg-white border border-slate-200 rounded-lg shadow-lg py-1 text-sm">
+                              <button
+                                className="w-full text-left px-3 py-2 hover:bg-slate-50 flex items-center gap-2 text-slate-700"
+                                onClick={() => { setOpenId(null); router.push(`/campaigns/builder?id=${c.id}`); }}
+                              >
+                                <Pencil className="h-4 w-4" /> Edit
+                              </button>
+                              <button
+                                className="w-full text-left px-3 py-2 hover:bg-slate-50 flex items-center gap-2 text-slate-700 disabled:opacity-50"
+                                onClick={() => handleDuplicate(c.id)}
+                                disabled={pending}
+                              >
+                                <Copy className="h-4 w-4" /> Duplicate
+                              </button>
+                              <button
+                                className="w-full text-left px-3 py-2 hover:bg-slate-50 flex items-center gap-2 text-slate-700"
+                                onClick={() => handleExport(c)}
+                              >
+                                <Download className="h-4 w-4" /> Export stats CSV
+                              </button>
+                              <div className="my-1 border-t border-slate-100" />
+                              <button
+                                className="w-full text-left px-3 py-2 hover:bg-red-50 flex items-center gap-2 text-red-600 disabled:opacity-50"
+                                onClick={() => { setOpenId(null); handleDelete(c.id); }}
+                                disabled={pending}
+                              >
+                                <Trash2 className="h-4 w-4" /> Delete
+                              </button>
+                            </div>
+                          )}
+                        </div>
                       </div>
                     </td>
                   </tr>

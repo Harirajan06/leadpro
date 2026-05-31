@@ -1,7 +1,7 @@
 "use client";
 import { useState, useTransition } from "react";
 import Link from "next/link";
-import { Search, Filter, Upload, Plus, MoreHorizontal, Trash2, ChevronDown, Download, Users2, Flame, Sparkles, Target } from "lucide-react";
+import { Search, Filter, Upload, Plus, Trash2, ChevronDown, Download, Users2, Flame, Sparkles, Target } from "lucide-react";
 import { Input, Select } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -11,7 +11,7 @@ import { Modal } from "@/components/ui/modal";
 import { industries, interestAreas } from "@/lib/mock-data";
 import { LeadForm } from "@/components/leads/lead-form";
 import { CsvUpload } from "@/components/leads/csv-upload";
-import { bulkDeleteLeads, deleteLead, type LeadRow } from "@/lib/queries/leads";
+import { deleteLead, type LeadRow } from "@/lib/queries/leads";
 
 const statusVariant: Record<string, "default" | "blue" | "warning" | "danger" | "success" | "purple"> = {
   New: "blue",
@@ -50,19 +50,66 @@ export function LeadsTable({ leads, stats }: Props) {
   const toggleAll = () =>
     setSelected(selected.length === filtered.length ? [] : filtered.map((l) => l.id));
 
+  function todayStr() {
+    const d = new window.Date();
+    return d.toISOString().slice(0, 10);
+  }
+
   async function handleBulkDelete() {
-    if (!confirm(`Delete ${selected.length} leads?`)) return;
+    if (!window.confirm(`Delete ${selected.length} leads?`)) return;
+    const ids = [...selected];
     start(async () => {
-      await bulkDeleteLeads(selected);
+      await Promise.all(ids.map((id) => deleteLead(id)));
       setSelected([]);
     });
   }
 
   async function handleDelete(id: string) {
-    if (!confirm("Delete this lead?")) return;
+    if (!window.confirm("Delete this lead?")) return;
     start(async () => {
       await deleteLead(id);
+      setSelected((s) => s.filter((x) => x !== id));
     });
+  }
+
+  function csvEscape(value: unknown): string {
+    if (value === null || value === undefined) return "";
+    const str = String(value);
+    if (str.includes(",") || str.includes("\"") || str.includes("\n") || str.includes("\r")) {
+      return `"${str.replace(/"/g, '""')}"`;
+    }
+    return str;
+  }
+
+  function handleExportCsv() {
+    const rowsToExport = selected.length > 0
+      ? filtered.filter((l) => selected.includes(l.id))
+      : filtered;
+    const headers = ["Name", "Email", "Company", "Industry", "Interest", "Score", "Status", "Source", "Created"];
+    const lines = [headers.join(",")];
+    for (const l of rowsToExport) {
+      lines.push([
+        csvEscape(l.full_name || l.company_name || ""),
+        csvEscape(l.email || ""),
+        csvEscape(l.company_name || ""),
+        csvEscape(l.industry || ""),
+        csvEscape(l.interest_area || ""),
+        csvEscape(l.lead_score),
+        csvEscape(l.status),
+        csvEscape(l.source || ""),
+        csvEscape(new window.Date(l.created_at).toISOString().slice(0, 10)),
+      ].join(","));
+    }
+    const csv = lines.join("\n");
+    const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
+    const url = window.URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `leads_${todayStr()}.csv`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    window.URL.revokeObjectURL(url);
   }
 
   return (
@@ -126,17 +173,19 @@ export function LeadsTable({ leads, stats }: Props) {
           <Button variant="outline" size="sm">
             <Filter className="h-4 w-4" /> More filters
           </Button>
-          {selected.length > 0 && (
-            <div className="ml-auto flex items-center gap-2 bg-blue-50 border border-blue-200 rounded-lg px-3 py-1.5">
-              <span className="text-sm text-blue-700 font-medium">{selected.length} selected</span>
-              <button className="text-blue-700 hover:text-blue-900 inline-flex items-center gap-1 text-sm">
-                <Download className="h-3.5 w-3.5" /> Export
-              </button>
-              <button onClick={handleBulkDelete} disabled={pending} className="text-red-600 hover:text-red-700 inline-flex items-center gap-1 text-sm disabled:opacity-50">
-                <Trash2 className="h-3.5 w-3.5" /> Delete
-              </button>
-            </div>
-          )}
+          <div className="ml-auto flex items-center gap-2">
+            <Button variant="outline" size="sm" onClick={handleExportCsv}>
+              <Download className="h-3.5 w-3.5" /> Export CSV
+            </Button>
+            {selected.length > 0 && (
+              <div className="flex items-center gap-2 bg-blue-50 border border-blue-200 rounded-lg px-3 py-1.5">
+                <span className="text-sm text-blue-700 font-medium">{selected.length} selected</span>
+                <button onClick={handleBulkDelete} disabled={pending} className="text-red-600 hover:text-red-700 inline-flex items-center gap-1 text-sm disabled:opacity-50">
+                  <Trash2 className="h-3.5 w-3.5" /> Delete
+                </button>
+              </div>
+            )}
+          </div>
         </div>
 
         {/* Table */}
@@ -214,8 +263,13 @@ export function LeadsTable({ leads, stats }: Props) {
                     <td className="px-4 py-3 text-slate-600">{l.source || "—"}</td>
                     <td className="px-4 py-3 text-slate-500">{new Date(l.created_at).toLocaleDateString()}</td>
                     <td className="px-4 py-3">
-                      <button onClick={() => handleDelete(l.id)} disabled={pending} className="p-1 rounded-md hover:bg-slate-100 disabled:opacity-50">
-                        <MoreHorizontal className="h-4 w-4 text-slate-400" />
+                      <button
+                        onClick={() => handleDelete(l.id)}
+                        disabled={pending}
+                        title="Delete lead"
+                        className="p-1 rounded-md hover:bg-red-50 disabled:opacity-50"
+                      >
+                        <Trash2 className="h-4 w-4 text-slate-400 hover:text-red-600" />
                       </button>
                     </td>
                   </tr>

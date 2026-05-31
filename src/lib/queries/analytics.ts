@@ -134,12 +134,39 @@ function relativeTime(date: Date): string {
 // ============================================================================
 // Analytics page
 // ============================================================================
-export async function getAnalyticsStats() {
+export interface AnalyticsStats {
+  emailsSent: number;
+  openRate: number;
+  clickRate: number;
+  replyRate: number;
+  funnel: { stage: string; value: number }[];
+  engagement: { day: string; opens: number; clicks: number; replies: number }[];
+  leadGrowth: { date: string; leads: number; hot: number }[];
+  campaignPerf: { name: string; openRate: number; replyRate: number }[];
+}
+
+async function computeAnalytics(startISO: string | null, endISO: string | null): Promise<AnalyticsStats> {
   const supabase = await createClient();
+
+  let campaignsQ = supabase.from("campaigns").select("campaign_name, sent_count, open_rate, reply_rate, bounce_rate, created_at");
+  let leadsQ = supabase.from("leads").select("status, lead_score, created_at");
+  let activitiesQ = supabase.from("lead_activities").select("activity_type, created_at");
+
+  if (startISO) {
+    campaignsQ = campaignsQ.gte("created_at", startISO);
+    leadsQ = leadsQ.gte("created_at", startISO);
+    activitiesQ = activitiesQ.gte("created_at", startISO);
+  }
+  if (endISO) {
+    campaignsQ = campaignsQ.lte("created_at", endISO);
+    leadsQ = leadsQ.lte("created_at", endISO);
+    activitiesQ = activitiesQ.lte("created_at", endISO);
+  }
+
   const [{ data: campaigns }, { data: leads }, { data: activities }] = await Promise.all([
-    supabase.from("campaigns").select("campaign_name, sent_count, open_rate, reply_rate, bounce_rate"),
-    supabase.from("leads").select("status, lead_score, created_at"),
-    supabase.from("lead_activities").select("activity_type, created_at"),
+    campaignsQ,
+    leadsQ,
+    activitiesQ,
   ]);
 
   const allCampaigns = campaigns || [];
@@ -156,13 +183,13 @@ export async function getAnalyticsStats() {
     return { stage, value: count };
   });
 
-  // Engagement last 7 days
+  // Engagement last 7 days (always last 7 days regardless of filter scope, for the chart)
   const days = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
   const engagement: { day: string; opens: number; clicks: number; replies: number }[] = [];
   for (let i = 6; i >= 0; i--) {
     const d = new Date();
     d.setDate(d.getDate() - i);
-    const start = new Date(d.setHours(0,0,0,0)).getTime();
+    const start = new Date(d.setHours(0, 0, 0, 0)).getTime();
     const end = start + 86400000;
     const dayActs = (activities || []).filter((a) => {
       const t = new Date(a.created_at).getTime();
@@ -210,4 +237,30 @@ export async function getAnalyticsStats() {
     leadGrowth,
     campaignPerf,
   };
+}
+
+export async function getAnalyticsStats(): Promise<AnalyticsStats> {
+  return computeAnalytics(null, null);
+}
+
+export async function getAnalyticsStatsRanged(days: number | "year"): Promise<AnalyticsStats> {
+  const now = new Date();
+  let start: Date;
+  if (days === "year") {
+    start = new Date(now.getFullYear(), 0, 1);
+  } else {
+    start = new Date(now.getTime() - days * 86400000);
+  }
+  return computeAnalytics(start.toISOString(), now.toISOString());
+}
+
+export async function getAnalyticsStatsCustom(start: string, end: string): Promise<AnalyticsStats> {
+  // Accept YYYY-MM-DD or ISO timestamps. Normalize to inclusive day boundaries.
+  const startDate = new Date(start);
+  const endDate = new Date(end);
+  // Ensure end-of-day for end boundary if it's a date-only string
+  if (/^\d{4}-\d{2}-\d{2}$/.test(end)) {
+    endDate.setHours(23, 59, 59, 999);
+  }
+  return computeAnalytics(startDate.toISOString(), endDate.toISOString());
 }

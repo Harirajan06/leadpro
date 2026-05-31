@@ -108,8 +108,19 @@ export async function inviteUser(email: string, fullName: string, roleId: number
     user_metadata: { full_name: fullName },
   });
   if (error) throw error;
-  // Update role + manager (trigger sets defaults)
-  await admin.from("users").update({ role_id: roleId, manager_id: managerId, full_name: fullName }).eq("user_id", data.user.id);
+  // Upsert to avoid races with the auth trigger inserting the users row
+  const { error: upsertError } = await admin.from("users").upsert(
+    {
+      user_id: data.user.id,
+      full_name: fullName,
+      email,
+      role_id: roleId,
+      manager_id: managerId,
+      status: "ACTIVE",
+    },
+    { onConflict: "user_id" }
+  );
+  if (upsertError) throw upsertError;
   revalidatePath("/users");
   return { user: data.user, tempPassword };
 }

@@ -1,85 +1,149 @@
 "use client";
-import { useState, useTransition } from "react";
+import { Suspense, useEffect, useState, useTransition } from "react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
-import { ArrowLeft, Save, Play, Zap, Mail, Clock, GitBranch, UserPlus, Bell, RefreshCw, FileDown, MessageSquare, Settings, ScrollText, Plus, AlertCircle } from "lucide-react";
+import { useRouter, useSearchParams } from "next/navigation";
+import {
+  ArrowLeft,
+  Save,
+  Play,
+  Zap,
+  Mail,
+  Clock,
+  GitBranch,
+  UserPlus,
+  Bell,
+  RefreshCw,
+  FileDown,
+  MessageSquare,
+  Settings,
+  ScrollText,
+  AlertCircle,
+} from "lucide-react";
 import { Input, Select } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Tabs } from "@/components/ui/tabs";
-import { createWorkflow, testRunWorkflow } from "@/lib/queries/workflows";
+import {
+  createWorkflow,
+  getWorkflowById,
+  testRunWorkflow,
+  updateWorkflow,
+  type WorkflowNode,
+  type TestRunResult,
+} from "@/lib/queries/workflows";
+import { WorkflowCanvas } from "@/components/workflows/workflow-canvas";
 
-const palette = [
-  { group: "Triggers", color: "border-emerald-200 bg-emerald-50 text-emerald-700", items: [
-    { icon: <FileDown className="h-3.5 w-3.5" />, label: "New Lead (Form)" },
-    { icon: <Zap className="h-3.5 w-3.5" />, label: "Guide Downloaded" },
-    { icon: <UserPlus className="h-3.5 w-3.5" />, label: "Webinar Registered" },
-  ]},
-  { group: "Actions", color: "border-blue-200 bg-blue-50 text-blue-700", items: [
-    { icon: <Mail className="h-3.5 w-3.5" />, label: "Send Email" },
-    { icon: <RefreshCw className="h-3.5 w-3.5" />, label: "Add to CRM" },
-    { icon: <Bell className="h-3.5 w-3.5" />, label: "Notify Team" },
-    { icon: <UserPlus className="h-3.5 w-3.5" />, label: "Add to Segment" },
-  ]},
-  { group: "Logic", color: "border-amber-200 bg-amber-50 text-amber-700", items: [
-    { icon: <Clock className="h-3.5 w-3.5" />, label: "Wait / Delay" },
-    { icon: <GitBranch className="h-3.5 w-3.5" />, label: "Condition (If/Else)" },
-    { icon: <MessageSquare className="h-3.5 w-3.5" />, label: "Update Lead Score" },
-  ]},
+interface PaletteItem {
+  icon: React.ReactNode;
+  label: string;
+  type: WorkflowNode["type"];
+  subtype: string;
+  description: string;
+}
+
+const palette: { group: string; color: string; items: PaletteItem[] }[] = [
+  {
+    group: "Triggers",
+    color: "border-emerald-200 bg-emerald-50 text-emerald-700",
+    items: [
+      { icon: <FileDown className="h-3.5 w-3.5" />, label: "New Lead (Form)", type: "trigger", subtype: "form_submit", description: "Triggered when /api/leads POST received" },
+      { icon: <Zap className="h-3.5 w-3.5" />, label: "Guide Downloaded", type: "trigger", subtype: "guide_download", description: "Triggered on guide download" },
+      { icon: <UserPlus className="h-3.5 w-3.5" />, label: "Webinar Registered", type: "trigger", subtype: "webinar_register", description: "Triggered on webinar signup" },
+    ],
+  },
+  {
+    group: "Actions",
+    color: "border-blue-200 bg-blue-50 text-blue-700",
+    items: [
+      { icon: <Mail className="h-3.5 w-3.5" />, label: "Send Email", type: "action", subtype: "send_email", description: "Send a templated email" },
+      { icon: <RefreshCw className="h-3.5 w-3.5" />, label: "Add to CRM", type: "action", subtype: "add_to_crm", description: "Sync lead to external CRM" },
+      { icon: <Bell className="h-3.5 w-3.5" />, label: "Notify Team", type: "action", subtype: "notify_team", description: "Send internal notification" },
+      { icon: <UserPlus className="h-3.5 w-3.5" />, label: "Add to Segment", type: "action", subtype: "add_to_segment", description: "Place lead in segment" },
+    ],
+  },
+  {
+    group: "Logic",
+    color: "border-amber-200 bg-amber-50 text-amber-700",
+    items: [
+      { icon: <Clock className="h-3.5 w-3.5" />, label: "Wait / Delay", type: "delay", subtype: "wait", description: "Pause before next step" },
+      { icon: <GitBranch className="h-3.5 w-3.5" />, label: "Condition (If/Else)", type: "condition", subtype: "condition", description: "Branch based on a rule" },
+      { icon: <MessageSquare className="h-3.5 w-3.5" />, label: "Update Lead Score", type: "action", subtype: "update_score", description: "Adjust lead score" },
+    ],
+  },
 ];
 
-const nodeStyles: Record<string, string> = {
-  trigger: "border-emerald-300 bg-emerald-50 text-emerald-900",
-  action: "border-blue-300 bg-blue-50 text-blue-900",
-  delay: "border-amber-300 bg-amber-50 text-amber-900",
-  condition: "border-purple-300 bg-purple-50 text-purple-900",
-};
+const SAMPLE_NODES: WorkflowNode[] = [
+  { id: "n_sample_1", type: "trigger", subtype: "form_submit", label: "New lead via web form", description: "Triggered when /api/leads POST received" },
+  { id: "n_sample_2", type: "action", subtype: "add_to_crm", label: "Add lead to CRM", description: "Sync to HubSpot pipeline 'New Inbound'" },
+  { id: "n_sample_3", type: "action", subtype: "send_email", label: "Send Welcome Email", description: "Template: Welcome Email" },
+];
 
-function Node({ type, icon, title, desc }: { type: keyof typeof nodeStyles; icon: React.ReactNode; title: string; desc: string }) {
-  return (
-    <div className={`relative w-64 p-3.5 rounded-xl border-2 shadow-sm hover:shadow-md transition-shadow ${nodeStyles[type]}`}>
-      <div className="flex items-center gap-2 mb-1">
-        <div className="h-7 w-7 rounded-lg bg-white flex items-center justify-center">{icon}</div>
-        <span className="text-xs uppercase font-bold tracking-wider opacity-70">{type}</span>
-      </div>
-      <p className="font-semibold text-sm">{title}</p>
-      <p className="text-xs opacity-75 mt-0.5">{desc}</p>
-    </div>
-  );
+function newId() {
+  return `node_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`;
 }
 
-function Connector({ label }: { label?: string }) {
-  return (
-    <div className="flex flex-col items-center my-1">
-      <div className="w-0.5 h-6 bg-slate-300" />
-      {label && (
-        <div className="bg-white border border-slate-200 rounded-full px-2 py-0.5 text-[10px] font-semibold text-slate-500 -my-1.5 z-10">
-          {label}
-        </div>
-      )}
-      <div className="w-0.5 h-6 bg-slate-300" />
-      <div className="w-2 h-2 border-r-2 border-b-2 border-slate-300 rotate-45 -mt-1.5" />
-    </div>
-  );
-}
-
-export default function WorkflowBuilderPage() {
+function WorkflowBuilderInner() {
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const id = searchParams.get("id");
+
   const [pending, start] = useTransition();
+  const [loading, setLoading] = useState(Boolean(id));
   const [tab, setTab] = useState("builder");
   const [name, setName] = useState("Lead Capture & Welcome Email");
   const [description, setDescription] = useState("Triggered when new lead submits website form");
   const [folder, setFolder] = useState("Lead Generation");
+  const [statusBadge, setStatusBadge] = useState<"Draft" | "Active" | "Paused">("Draft");
+  const [nodes, setNodes] = useState<WorkflowNode[]>(SAMPLE_NODES);
   const [error, setError] = useState<string | null>(null);
-  const [testResult, setTestResult] = useState<{ steps: { name: string; status: string; durationMs: number; branch?: string }[] } | null>(null);
+  const [testResult, setTestResult] = useState<TestRunResult | null>(null);
+
+  // Load existing workflow if ?id= is present
+  useEffect(() => {
+    if (!id) return;
+    let cancelled = false;
+    (async () => {
+      try {
+        const wf = await getWorkflowById(id);
+        if (cancelled || !wf) return;
+        setName(wf.workflow_name);
+        setDescription(wf.description ?? "");
+        setFolder(wf.folder);
+        if (wf.status === "Draft" || wf.status === "Active" || wf.status === "Paused") {
+          setStatusBadge(wf.status);
+        }
+        if (wf.config?.nodes?.length) {
+          setNodes(wf.config.nodes);
+        }
+      } catch (err) {
+        if (!cancelled) setError(err instanceof Error ? err.message : "Failed to load workflow");
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [id]);
+
+  function addFromPalette(item: PaletteItem) {
+    const node: WorkflowNode = {
+      id: newId(),
+      type: item.type,
+      subtype: item.subtype,
+      label: item.label,
+      description: item.description,
+    };
+    setNodes((prev) => [...prev, node]);
+  }
 
   function handleTest() {
     setError(null);
     setTestResult(null);
     start(async () => {
       try {
-        const result = await testRunWorkflow(null, name);
+        const result = await testRunWorkflow(id ?? null, name, { nodes });
         setTestResult(result);
         setTab("logs");
       } catch (err) {
@@ -90,10 +154,24 @@ export default function WorkflowBuilderPage() {
 
   function handleSave(status: "Draft" | "Active") {
     setError(null);
-    if (!name.trim()) { setError("Name required"); return; }
+    if (!name.trim()) {
+      setError("Name required");
+      return;
+    }
     start(async () => {
       try {
-        await createWorkflow({ workflow_name: name.trim(), description, folder, status });
+        const payload = {
+          workflow_name: name.trim(),
+          description,
+          folder,
+          status,
+          config: { nodes },
+        };
+        if (id) {
+          await updateWorkflow(id, payload);
+        } else {
+          await createWorkflow(payload);
+        }
         router.push("/workflows");
       } catch (err) {
         setError(err instanceof Error ? err.message : "Save failed");
@@ -101,22 +179,43 @@ export default function WorkflowBuilderPage() {
     });
   }
 
+  if (loading) {
+    return (
+      <div className="max-w-[1600px] mx-auto py-20 text-center text-sm text-slate-500">
+        Loading workflow…
+      </div>
+    );
+  }
+
   return (
     <div className="max-w-[1600px] mx-auto">
       <div className="flex items-center justify-between mb-4 flex-wrap gap-3">
         <div>
-          <Link href="/workflows" className="inline-flex items-center gap-1.5 text-sm text-slate-500 hover:text-slate-700 mb-2">
+          <Link
+            href="/workflows"
+            className="inline-flex items-center gap-1.5 text-sm text-slate-500 hover:text-slate-700 mb-2"
+          >
             <ArrowLeft className="h-4 w-4" /> Back to workflows
           </Link>
           <div className="flex items-center gap-2">
-            <Input value={name} onChange={(e) => setName(e.target.value)} className="text-2xl font-bold border-transparent !h-auto px-0 hover:bg-slate-50 focus:bg-white focus:px-3 transition-all min-w-[400px]" />
-            <Badge variant="default">Draft</Badge>
+            <Input
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              className="text-2xl font-bold border-transparent !h-auto px-0 hover:bg-slate-50 focus:bg-white focus:px-3 transition-all min-w-[400px]"
+            />
+            <Badge variant={statusBadge === "Active" ? "success" : "default"}>{statusBadge}</Badge>
           </div>
         </div>
         <div className="flex items-center gap-2">
-          <Button variant="outline" onClick={handleTest} disabled={pending}>Test automation</Button>
-          <Button variant="outline" onClick={() => handleSave("Draft")} disabled={pending}><Save className="h-4 w-4" /> Save</Button>
-          <Button onClick={() => handleSave("Active")} disabled={pending}><Play className="h-4 w-4" /> {pending ? "Activating..." : "Activate"}</Button>
+          <Button variant="outline" onClick={handleTest} disabled={pending}>
+            Test automation
+          </Button>
+          <Button variant="outline" onClick={() => handleSave("Draft")} disabled={pending}>
+            <Save className="h-4 w-4" /> Save
+          </Button>
+          <Button onClick={() => handleSave("Active")} disabled={pending}>
+            <Play className="h-4 w-4" /> {pending ? "Activating..." : "Activate"}
+          </Button>
         </div>
       </div>
 
@@ -141,7 +240,9 @@ export default function WorkflowBuilderPage() {
       {tab === "builder" && (
         <div className="grid grid-cols-1 lg:grid-cols-[260px_1fr] gap-4">
           <Card className="p-4 h-fit sticky top-20">
-            <p className="text-xs font-semibold uppercase tracking-wider text-slate-400 mb-3">Drag to add</p>
+            <p className="text-xs font-semibold uppercase tracking-wider text-slate-400 mb-3">
+              Click to add
+            </p>
             <div className="space-y-4">
               {palette.map((g) => (
                 <div key={g.group}>
@@ -150,7 +251,8 @@ export default function WorkflowBuilderPage() {
                     {g.items.map((i) => (
                       <button
                         key={i.label}
-                        className={`w-full flex items-center gap-2 px-2.5 py-1.5 rounded-lg border text-xs font-medium cursor-grab ${g.color}`}
+                        onClick={() => addFromPalette(i)}
+                        className={`w-full flex items-center gap-2 px-2.5 py-1.5 rounded-lg border text-xs font-medium hover:shadow-sm ${g.color}`}
                       >
                         {i.icon} {i.label}
                       </button>
@@ -162,32 +264,7 @@ export default function WorkflowBuilderPage() {
           </Card>
 
           <Card className="p-8 bg-[radial-gradient(circle,_#e2e8f0_1px,_transparent_1px)] bg-[length:20px_20px] min-h-[700px]">
-            <div className="flex flex-col items-center">
-              <Node type="trigger" icon={<FileDown className="h-4 w-4 text-emerald-600" />} title="New lead via web form" desc="Triggered when /api/leads POST received" />
-              <Connector />
-              <Node type="action" icon={<RefreshCw className="h-4 w-4 text-blue-600" />} title="Add lead to CRM" desc="Sync to HubSpot pipeline 'New Inbound'" />
-              <Connector />
-              <Node type="action" icon={<Mail className="h-4 w-4 text-blue-600" />} title="Send Welcome Email" desc="Template: Welcome Email" />
-              <Connector />
-              <Node type="delay" icon={<Clock className="h-4 w-4 text-amber-600" />} title="Wait 1 day" desc="Pause before next step" />
-              <Connector />
-              <Node type="condition" icon={<GitBranch className="h-4 w-4 text-purple-600" />} title="Did they open the email?" desc="Check open event in last 24 hours" />
-
-              <div className="flex items-start justify-center gap-12 mt-2 w-full">
-                <div className="flex flex-col items-center">
-                  <Connector label="YES" />
-                  <Node type="action" icon={<Mail className="h-4 w-4 text-blue-600" />} title="Send Case Study" desc="Template: Customer Success" />
-                </div>
-                <div className="flex flex-col items-center">
-                  <Connector label="NO" />
-                  <Node type="action" icon={<Bell className="h-4 w-4 text-blue-600" />} title="Send Reminder Email" desc="Template: Quick reminder" />
-                </div>
-              </div>
-
-              <button className="mt-8 flex items-center gap-2 px-4 py-2 rounded-lg border-2 border-dashed border-slate-300 text-sm text-slate-500 hover:border-blue-300 hover:bg-blue-50 hover:text-blue-700">
-                <Plus className="h-4 w-4" /> Add step
-              </button>
-            </div>
+            <WorkflowCanvas nodes={nodes} onChange={setNodes} />
           </Card>
         </div>
       )}
@@ -217,18 +294,32 @@ export default function WorkflowBuilderPage() {
         <Card>
           <div className="p-4 border-b border-slate-100 flex items-center justify-between">
             <h3 className="font-semibold text-slate-900">Execution logs</h3>
-            <Button variant="outline" size="sm" onClick={handleTest} disabled={pending}>Run test again</Button>
+            <Button variant="outline" size="sm" onClick={handleTest} disabled={pending}>
+              Run test again
+            </Button>
           </div>
           {testResult ? (
             <ul className="divide-y divide-slate-100">
               {testResult.steps.map((s, i) => (
                 <li key={i} className="p-4 flex items-center gap-3">
-                  <span className={`h-2 w-2 rounded-full flex-shrink-0 ${s.status === "ok" ? "bg-emerald-500" : "bg-slate-300"}`} />
+                  <span
+                    className={`h-2 w-2 rounded-full flex-shrink-0 ${
+                      s.status === "ok" ? "bg-emerald-500" : s.status === "error" ? "bg-red-500" : "bg-slate-300"
+                    }`}
+                  />
                   <div className="flex-1">
-                    <p className="text-sm text-slate-900">{s.name}{s.branch ? ` (branch: ${s.branch})` : ""}</p>
-                    <p className="text-xs text-slate-500">{s.durationMs}ms · {s.status}</p>
+                    <p className="text-sm text-slate-900">
+                      {s.name}
+                      {s.branch ? ` (branch: ${s.branch})` : ""}
+                    </p>
+                    <p className="text-xs text-slate-500">
+                      {s.durationMs}ms · {s.status}
+                      {s.type ? ` · ${s.type}` : ""}
+                    </p>
                   </div>
-                  <Badge variant={s.status === "ok" ? "success" : "default"}>{s.status === "ok" ? "Success" : "Skipped"}</Badge>
+                  <Badge variant={s.status === "ok" ? "success" : "default"}>
+                    {s.status === "ok" ? "Success" : s.status === "error" ? "Error" : "Skipped"}
+                  </Badge>
                 </li>
               ))}
             </ul>
@@ -240,5 +331,19 @@ export default function WorkflowBuilderPage() {
         </Card>
       )}
     </div>
+  );
+}
+
+export default function WorkflowBuilderPage() {
+  return (
+    <Suspense
+      fallback={
+        <div className="max-w-[1600px] mx-auto py-20 text-center text-sm text-slate-500">
+          Loading…
+        </div>
+      }
+    >
+      <WorkflowBuilderInner />
+    </Suspense>
   );
 }

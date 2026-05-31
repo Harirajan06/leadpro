@@ -1,6 +1,8 @@
 "use client";
+import { useEffect, useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import { getAiCreditsUsage } from "@/lib/queries/credits";
 import {
   LayoutDashboard,
   Users2,
@@ -36,6 +38,19 @@ const navAdmin = [
 
 export function Sidebar() {
   const pathname = usePathname();
+  const [credits, setCredits] = useState<{ used: number; total: number } | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    getAiCreditsUsage()
+      .then((c) => {
+        if (!cancelled) setCredits(c);
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   return (
     <aside className="w-64 bg-white border-r border-slate-200 flex flex-col h-screen sticky top-0">
@@ -108,15 +123,26 @@ export function Sidebar() {
             <Sparkles className="h-4 w-4" />
             <p className="font-semibold text-sm">AI Credits</p>
           </div>
-          <p className="text-xs text-blue-100 mb-2">2,847 / 5,000 used</p>
+          <p className="text-xs text-blue-100 mb-2">
+            {credits
+              ? `${credits.used.toLocaleString()} / ${credits.total.toLocaleString()} used`
+              : "Loading..."}
+          </p>
           <div className="h-1.5 bg-white/20 rounded-full overflow-hidden">
-            <div className="h-full bg-white rounded-full" style={{ width: "57%" }} />
+            <div
+              className="h-full bg-white rounded-full transition-all"
+              style={{
+                width: credits
+                  ? `${Math.min(100, Math.round((credits.used / credits.total) * 100))}%`
+                  : "0%",
+              }}
+            />
           </div>
           <button className="mt-3 text-xs font-medium text-white/90 hover:text-white">Upgrade plan →</button>
         </div>
 
         <Link
-          href="#"
+          href="/help"
           className="flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium text-slate-600 hover:bg-slate-50"
         >
           <HelpCircle className="h-4.5 w-4.5 text-slate-400" />

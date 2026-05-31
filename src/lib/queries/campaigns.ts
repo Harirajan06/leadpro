@@ -72,3 +72,32 @@ export async function deleteCampaign(id: string) {
 export async function setCampaignStatus(id: string, status: string) {
   return updateCampaign(id, { status });
 }
+
+export async function duplicateCampaign(id: string) {
+  const supabase = await createClient();
+  const { data: existing, error: fetchError } = await supabase
+    .from("campaigns")
+    .select("*")
+    .eq("id", id)
+    .single();
+  if (fetchError) throw fetchError;
+  if (!existing) throw new Error("Campaign not found");
+
+  const { id: _id, created_at: _createdAt, updated_at: _updatedAt, ...rest } = existing;
+  void _id; void _createdAt; void _updatedAt;
+
+  const copy = {
+    ...rest,
+    campaign_name: `${existing.campaign_name} (copy)`,
+    status: "Draft",
+    sent_count: 0,
+    open_rate: 0,
+    reply_rate: 0,
+    bounce_rate: 0,
+  };
+
+  const { data, error } = await supabase.from("campaigns").insert(copy).select().single();
+  if (error) throw error;
+  revalidatePath("/campaigns");
+  return data;
+}

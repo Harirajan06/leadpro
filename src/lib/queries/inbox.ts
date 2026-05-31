@@ -16,6 +16,7 @@ export interface InboxMessage {
 export interface InboxConversation extends InboxMessage {
   lead_name: string | null;
   lead_company: string | null;
+  lead_email: string | null;
   campaign_name: string | null;
 }
 
@@ -25,14 +26,14 @@ export async function getInboxConversations(): Promise<InboxConversation[]> {
     .from("inbox_messages")
     .select(`
       *,
-      leads(full_name, company_name),
+      leads(full_name, company_name, email),
       campaigns(campaign_name)
     `)
     .eq("direction", "inbound")
     .order("created_at", { ascending: false });
   if (error || !data) return [];
   return data.map((m) => {
-    const leads = (m as { leads?: { full_name?: string; company_name?: string } }).leads;
+    const leads = (m as { leads?: { full_name?: string; company_name?: string; email?: string } }).leads;
     const campaigns = (m as { campaigns?: { campaign_name?: string } }).campaigns;
     return {
       id: m.id,
@@ -45,6 +46,7 @@ export async function getInboxConversations(): Promise<InboxConversation[]> {
       created_at: m.created_at,
       lead_name: leads?.full_name || leads?.company_name || "Unknown",
       lead_company: leads?.company_name || null,
+      lead_email: leads?.email || null,
       campaign_name: campaigns?.campaign_name || null,
     };
   });
@@ -63,6 +65,12 @@ export async function getInboxThread(leadId: string): Promise<InboxMessage[]> {
 export async function markRead(id: string) {
   const supabase = await createClient();
   await supabase.from("inbox_messages").update({ is_read: true }).eq("id", id);
+  revalidatePath("/inbox");
+}
+
+export async function markUnread(id: string) {
+  const supabase = await createClient();
+  await supabase.from("inbox_messages").update({ is_read: false }).eq("id", id);
   revalidatePath("/inbox");
 }
 

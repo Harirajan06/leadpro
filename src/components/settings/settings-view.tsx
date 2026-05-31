@@ -258,25 +258,39 @@ export function SettingsView({ profile, integrations, emailDomain, blocklist }: 
           {active === "api" && (
             <Card className="p-6">
               <h3 className="font-semibold text-slate-900 mb-1">Integrations</h3>
-              <p className="text-sm text-slate-500 mb-5">Connected services — keys are stored as server-only env vars</p>
+              <p className="text-sm text-slate-500 mb-3">Connected services — keys are stored as server-only env vars</p>
+
+              <p className="text-sm text-slate-600 leading-relaxed mb-5 bg-slate-50 border border-slate-100 rounded-lg p-3">
+                LeadPro connects with these services to power AI, send emails, store data, and sync with your CRM. Keys are stored as server-only env vars and never exposed to the browser. Connect or rotate keys here, or in your hosting platform (Vercel) for production.
+              </p>
 
               <div className="space-y-3">
-                {integrations.map((k) => (
-                  <div key={k.name} className="flex items-center justify-between p-4 border border-slate-200 rounded-xl">
-                    <div className="flex items-center gap-3">
-                      <div className="h-10 w-10 rounded-lg bg-slate-100 flex items-center justify-center text-lg">{k.emoji}</div>
-                      <div>
-                        <div className="flex items-center gap-2">
-                          <p className="font-semibold text-slate-900">{k.name}</p>
-                          {k.configured ? <Badge variant="success"><Check className="h-2.5 w-2.5" /> Connected</Badge> : <Badge variant="default">Not connected</Badge>}
+                {integrations.map((k) => {
+                  const notes: Record<string, string> = {
+                    "AI Provider (Groq)": "Powers lead scoring, email writing, and prospect insights",
+                    "Resend (Email)": "Sends OTP emails, campaign emails, and notifications",
+                    "Supabase": "Database, authentication, and file storage",
+                    "HubSpot CRM": "Sync leads and campaigns with your CRM (optional)",
+                  };
+                  const note = notes[k.name];
+                  return (
+                    <div key={k.name} className="flex items-center justify-between p-4 border border-slate-200 rounded-xl">
+                      <div className="flex items-center gap-3">
+                        <div className="h-10 w-10 rounded-lg bg-slate-100 flex items-center justify-center text-lg">{k.emoji}</div>
+                        <div>
+                          <div className="flex items-center gap-2">
+                            <p className="font-semibold text-slate-900">{k.name}</p>
+                            {k.configured ? <Badge variant="success"><Check className="h-2.5 w-2.5" /> Connected</Badge> : <Badge variant="default">Not connected</Badge>}
+                          </div>
+                          <p className="text-xs text-slate-500">{k.description}</p>
+                          {note && <p className="text-xs italic text-slate-500 mt-1">{note}</p>}
+                          {k.maskedKey && <code className="text-xs text-slate-400 font-mono mt-1 inline-block">{k.maskedKey}</code>}
                         </div>
-                        <p className="text-xs text-slate-500">{k.description}</p>
-                        {k.maskedKey && <code className="text-xs text-slate-400 font-mono mt-1 inline-block">{k.maskedKey}</code>}
                       </div>
+                      <Button variant="ghost" size="icon" disabled><ExternalLink className="h-4 w-4" /></Button>
                     </div>
-                    <Button variant="ghost" size="icon" disabled><ExternalLink className="h-4 w-4" /></Button>
-                  </div>
-                ))}
+                  );
+                })}
               </div>
 
               <div className="mt-5 p-3 bg-blue-50 border border-blue-100 rounded-lg flex items-start gap-2 text-sm text-blue-900">

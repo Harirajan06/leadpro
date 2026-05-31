@@ -3,6 +3,8 @@ import { createClient } from "@/lib/supabase/server";
 import { sendEmail, emailConfigured, emailDomainVerified } from "./resend";
 import { getLeadById } from "@/lib/queries/leads";
 import { isBlocked } from "@/lib/queries/blocklist";
+import { substituteMergeTags } from "@/lib/email/merge-tags";
+import { getCurrentUserProfile } from "@/lib/queries/users";
 import { revalidatePath } from "next/cache";
 
 export async function getEmailStatus() {
@@ -28,23 +30,28 @@ export async function sendLeadEmail(leadId: string, subject: string, body: strin
     return { ok: false, error: "This recipient is on your blocklist" };
   }
 
+  const profile = await getCurrentUserProfile().catch(() => null);
+  const senderName = (profile as { full_name?: string | null } | null)?.full_name || undefined;
+  const finalSubject = substituteMergeTags(subject, lead, senderName);
+  const finalBody = substituteMergeTags(body, lead, senderName);
+
   const result = await sendEmail({
     to: lead.email,
-    subject,
-    text: body,
+    subject: finalSubject,
+    text: finalBody,
   });
 
   if (!result.ok) {
     return { ok: false, error: result.error };
   }
 
-  // Log to inbox as outbound message
+  // Log to inbox as outbound message (store the substituted text)
   const supabase = await createClient();
   await supabase.from("inbox_messages").insert({
     lead_id: leadId,
     direction: "outbound",
-    subject,
-    body,
+    subject: finalSubject,
+    body: finalBody,
     is_read: true,
   });
 

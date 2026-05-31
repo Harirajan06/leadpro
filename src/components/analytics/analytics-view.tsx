@@ -1,10 +1,13 @@
 "use client";
+import { useState, useTransition } from "react";
 import { Calendar, Download, ArrowUp, ArrowDown, Mail, Mouse, MessageCircle } from "lucide-react";
 import { Area, AreaChart, Bar, BarChart, CartesianGrid, Legend, Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Select } from "@/components/ui/input";
+import { Modal } from "@/components/ui/modal";
 import { PageHeader } from "@/components/ui/page-header";
+import { getAnalyticsStatsRanged, getAnalyticsStatsCustom } from "@/lib/queries/analytics";
 
 interface Stats {
   emailsSent: number;
@@ -19,8 +22,79 @@ interface Stats {
 
 const funnelColors = ["#3b82f6", "#06b6d4", "#f59e0b", "#10b981", "#8b5cf6"];
 
-export function AnalyticsView({ stats }: { stats: Stats }) {
+function todayStr() {
+  const d = new window.Date();
+  return d.toISOString().slice(0, 10);
+}
+
+function csvEscape(v: string | number): string {
+  const s = String(v);
+  if (/[",\n]/.test(s)) return `"${s.replace(/"/g, '""')}"`;
+  return s;
+}
+
+export function AnalyticsView({ stats: initialStats }: { stats: Stats }) {
+  const [stats, setStats] = useState<Stats>(initialStats);
+  const [selectedRange, setSelectedRange] = useState<string>("30");
+  const [customOpen, setCustomOpen] = useState(false);
+  const [customDates, setCustomDates] = useState<{ start: string; end: string }>({
+    start: todayStr(),
+    end: todayStr(),
+  });
+  const [isPending, startTransition] = useTransition();
+
   const maxFunnel = Math.max(1, ...stats.funnel.map((f) => f.value));
+
+  function handleRangeChange(e: React.ChangeEvent<HTMLSelectElement>) {
+    const v = e.target.value;
+    setSelectedRange(v);
+    startTransition(async () => {
+      const next = v === "year"
+        ? await getAnalyticsStatsRanged("year")
+        : await getAnalyticsStatsRanged(Number(v));
+      setStats(next);
+    });
+  }
+
+  function handleApplyCustom() {
+    startTransition(async () => {
+      const next = await getAnalyticsStatsCustom(customDates.start, customDates.end);
+      setStats(next);
+      setCustomOpen(false);
+    });
+  }
+
+  function handleExport() {
+    const rows: string[] = [];
+    rows.push("Summary");
+    rows.push("Label,Value");
+    rows.push(`Emails Sent,${csvEscape(stats.emailsSent)}`);
+    rows.push(`Open Rate,${csvEscape(stats.openRate + "%")}`);
+    rows.push(`Click Rate,${csvEscape(stats.clickRate + "%")}`);
+    rows.push(`Reply Rate,${csvEscape(stats.replyRate + "%")}`);
+    rows.push("");
+    rows.push("Campaign Comparison");
+    rows.push("Campaign,Open%,Reply%");
+    for (const c of stats.campaignPerf) {
+      rows.push(`${csvEscape(c.name)},${csvEscape(c.openRate)},${csvEscape(c.replyRate)}`);
+    }
+    rows.push("");
+    rows.push("Conversion Funnel");
+    rows.push("Stage,Count");
+    for (const f of stats.funnel) {
+      rows.push(`${csvEscape(f.stage)},${csvEscape(f.value)}`);
+    }
+    const csv = rows.join("\n");
+    const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `leadpro-analytics-${todayStr()}.csv`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  }
 
   return (
     <div className="max-w-[1600px] mx-auto">
@@ -29,14 +103,23 @@ export function AnalyticsView({ stats }: { stats: Stats }) {
         description="Campaign performance, conversion funnel & engagement insights"
         actions={
           <>
-            <Select className="max-w-[160px]">
-              <option>Last 30 days</option>
-              <option>Last 7 days</option>
-              <option>Last 90 days</option>
-              <option>This year</option>
+            <Select
+              className="max-w-[160px]"
+              value={selectedRange}
+              onChange={handleRangeChange}
+              disabled={isPending}
+            >
+              <option value="30">Last 30 days</option>
+              <option value="7">Last 7 days</option>
+              <option value="90">Last 90 days</option>
+              <option value="year">This year</option>
             </Select>
-            <Button variant="outline"><Calendar className="h-4 w-4" /> Custom range</Button>
-            <Button variant="outline"><Download className="h-4 w-4" /> Export</Button>
+            <Button variant="outline" onClick={() => setCustomOpen(true)} disabled={isPending}>
+              <Calendar className="h-4 w-4" /> Custom range
+            </Button>
+            <Button variant="outline" onClick={handleExport}>
+              <Download className="h-4 w-4" /> Export
+            </Button>
           </>
         }
       />
@@ -151,6 +234,46 @@ export function AnalyticsView({ stats }: { stats: Stats }) {
           </div>
         </Card>
       </div>
+
+      <Modal
+        open={customOpen}
+        onClose={() => setCustomOpen(false)}
+        title="Custom date range"
+        description="Pick a start and end date to filter analytics"
+        size="sm"
+      >
+        <div className="p-5 space-y-4">
+          <div>
+            <label className="block text-sm font-medium text-slate-700 mb-1.5">Start date</label>
+            <input
+              type="date"
+              value={customDates.start}
+              max={customDates.end}
+              onChange={(e) => setCustomDates((d) => ({ ...d, start: e.target.value }))}
+              className="w-full h-10 rounded-lg border border-slate-200 bg-white px-3 text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500 transition"
+            />
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-slate-700 mb-1.5">End date</label>
+            <input
+              type="date"
+              value={customDates.end}
+              min={customDates.start}
+              max={todayStr()}
+              onChange={(e) => setCustomDates((d) => ({ ...d, end: e.target.value }))}
+              className="w-full h-10 rounded-lg border border-slate-200 bg-white px-3 text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500 transition"
+            />
+          </div>
+          <div className="flex justify-end gap-2 pt-2">
+            <Button variant="outline" onClick={() => setCustomOpen(false)} disabled={isPending}>
+              Cancel
+            </Button>
+            <Button onClick={handleApplyCustom} disabled={isPending || !customDates.start || !customDates.end}>
+              {isPending ? "Applying..." : "Apply"}
+            </Button>
+          </div>
+        </div>
+      </Modal>
     </div>
   );
 }

@@ -80,3 +80,45 @@ export async function deleteSegment(id: string) {
   if (error) throw error;
   revalidatePath("/segments");
 }
+
+function csvEscape(val: unknown): string {
+  if (val === null || val === undefined) return "";
+  const s = String(val);
+  if (s.includes(",") || s.includes("\"") || s.includes("\n")) {
+    return '"' + s.replace(/"/g, '""') + '"';
+  }
+  return s;
+}
+
+export async function exportSegmentCsv(segmentId: string): Promise<{ filename: string; csv: string }> {
+  const supabase = await createClient();
+  const { data: segment } = await supabase
+    .from("segments")
+    .select("segment_name")
+    .eq("id", segmentId)
+    .single();
+
+  const segmentName = segment?.segment_name || "segment";
+
+  const { data: members } = await supabase
+    .from("segment_members")
+    .select("leads(full_name, email, company_name, industry, lead_score, status)")
+    .eq("segment_id", segmentId);
+
+  const header = ["Name", "Email", "Company", "Industry", "Score", "Status"].join(",");
+  const rows = (members || []).map((m) => {
+    const lead = (m as { leads?: { full_name?: string; email?: string; company_name?: string; industry?: string; lead_score?: number; status?: string } }).leads;
+    return [
+      csvEscape(lead?.full_name),
+      csvEscape(lead?.email),
+      csvEscape(lead?.company_name),
+      csvEscape(lead?.industry),
+      csvEscape(lead?.lead_score),
+      csvEscape(lead?.status),
+    ].join(",");
+  });
+
+  const csv = [header, ...rows].join("\n");
+  const filename = segmentName.toLowerCase().replace(/\s+/g, "-") + ".csv";
+  return { filename, csv };
+}

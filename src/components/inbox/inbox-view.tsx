@@ -1,12 +1,18 @@
 "use client";
-import { useState, useTransition } from "react";
-import { Search, Filter, Forward, Archive, Star, Send, Paperclip, MoreHorizontal, Tag } from "lucide-react";
+import { useState, useTransition, useEffect, useRef } from "react";
+import { useRouter } from "next/navigation";
+import { Search, Filter, Forward, Archive, Star, Send, Paperclip, MoreHorizontal, Tag, X } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { PageHeader } from "@/components/ui/page-header";
-import { markRead, sendReply, type InboxConversation } from "@/lib/queries/inbox";
+import { Modal } from "@/components/ui/modal";
+import { markRead, markUnread, sendReply, type InboxConversation } from "@/lib/queries/inbox";
+import { addBlocklistEntry } from "@/lib/queries/blocklist";
+import { getEmailTemplates, type EmailTemplateRow } from "@/lib/queries/templates";
+
+const TAG_OPTIONS = ["Hot", "Needs Reply", "Follow Up", "Spam"] as const;
 
 function relativeTime(iso: string): string {
   const diff = Date.now() - new Date(iso).getTime();
@@ -20,13 +26,49 @@ function relativeTime(iso: string): string {
 }
 
 export function InboxView({ conversations }: { conversations: InboxConversation[] }) {
+  const router = useRouter();
   const [pending, start] = useTransition();
-  const [active, setActive] = useState(conversations[0] || null);
+  const [archived, setArchived] = useState<Set<string>>(new Set());
+  const visible = conversations.filter((c) => !archived.has(c.id));
+  const [active, setActive] = useState<InboxConversation | null>(visible[0] || null);
   const [reply, setReply] = useState("");
   const [filter, setFilter] = useState<"all" | "unread" | "replied">("all");
   const [search, setSearch] = useState("");
 
-  const filtered = conversations
+  // Icon state
+  const [starred, setStarred] = useState<Set<string>>(new Set());
+  const [tagsByConv, setTagsByConv] = useState<Map<string, string[]>>(new Map());
+  const [tagOpen, setTagOpen] = useState(false);
+  const [moreOpen, setMoreOpen] = useState(false);
+  const [templatesOpen, setTemplatesOpen] = useState(false);
+  const [forwardOpen, setForwardOpen] = useState(false);
+  const [forwardTo, setForwardTo] = useState("");
+  const [attachment, setAttachment] = useState<File | null>(null);
+  const [templates, setTemplates] = useState<EmailTemplateRow[]>([]);
+
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const tagPopoverRef = useRef<HTMLDivElement>(null);
+  const morePopoverRef = useRef<HTMLDivElement>(null);
+  const templatesPopoverRef = useRef<HTMLDivElement>(null);
+
+  // Load templates on mount
+  useEffect(() => {
+    getEmailTemplates().then(setTemplates).catch(() => setTemplates([]));
+  }, []);
+
+  // Close popovers on outside click
+  useEffect(() => {
+    function onDocClick(e: MouseEvent) {
+      const target = e.target as Node;
+      if (tagOpen && tagPopoverRef.current && !tagPopoverRef.current.contains(target)) setTagOpen(false);
+      if (moreOpen && morePopoverRef.current && !morePopoverRef.current.contains(target)) setMoreOpen(false);
+      if (templatesOpen && templatesPopoverRef.current && !templatesPopoverRef.current.contains(target)) setTemplatesOpen(false);
+    }
+    document.addEventListener("mousedown", onDocClick);
+    return () => document.removeEventListener("mousedown", onDocClick);
+  }, [tagOpen, moreOpen, templatesOpen]);
+
+  const filtered = visible
     .filter((c) => filter === "all" || (filter === "unread" && !c.is_read) || (filter === "replied" && c.is_read))
     .filter((c) => !search || (c.lead_name?.toLowerCase().includes(search.toLowerCase()) ?? false));
 
@@ -40,8 +82,106 @@ export function InboxView({ conversations }: { conversations: InboxConversation[
     start(async () => {
       await sendReply(active.lead_id!, `Re: ${active.subject || ""}`, reply.trim());
       setReply("");
+      setAttachment(null);
     });
   }
+
+  function toggleStar() {
+    if (!active) return;
+    setStarred((prev) => {
+      const next = new Set(prev);
+      if (next.has(active.id)) next.delete(active.id);
+      else next.add(active.id);
+      return next;
+    });
+  }
+
+  function addTag(tag: string) {
+    if (!active) return;
+    setTagsByConv((prev) => {
+      const next = new Map(prev);
+      const current = next.get(active.id) || [];
+      if (!current.includes(tag)) next.set(active.id, [...current, tag]);
+      return next;
+    });
+    setTagOpen(false);
+  }
+
+  function removeTag(tag: string) {
+    if (!active) return;
+    setTagsByConv((prev) => {
+      const next = new Map(prev);
+      const current = next.get(active.id) || [];
+      next.set(active.id, current.filter((t) => t !== tag));
+      return next;
+    });
+  }
+
+  function handleArchive() {
+    if (!active) return;
+    const activeId = active.id;
+    const remaining = visible.filter((c) => c.id !== activeId);
+    setArchived((prev) => {
+      const next = new Set(prev);
+      next.add(activeId);
+      return next;
+    });
+    setActive(remaining[0] || null);
+  }
+
+  function handleMarkUnread() {
+    if (!active) return;
+    const id = active.id;
+    setMoreOpen(false);
+    start(async () => {
+      await markUnread(id);
+      router.refresh();
+    });
+  }
+
+  function handleBlockSender() {
+    if (!active) return;
+    const email = active.lead_email;
+    setMoreOpen(false);
+    if (!email) {
+      alert("No sender email available to block");
+      return;
+    }
+    start(async () => {
+      await addBlocklistEntry(email, "Blocked from inbox");
+      alert(`Blocked ${email}`);
+    });
+  }
+
+  function handleOpenLeadProfile() {
+    if (!active?.lead_id) return;
+    setMoreOpen(false);
+    router.push(`/leads/${active.lead_id}`);
+  }
+
+  function handlePickFile() {
+    fileInputRef.current?.click();
+  }
+
+  function handleFileChange(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (file) setAttachment(file);
+    e.target.value = "";
+  }
+
+  function handlePickTemplate(t: EmailTemplateRow) {
+    setReply(t.body || "");
+    setTemplatesOpen(false);
+  }
+
+  function handleForwardSubmit() {
+    setForwardOpen(false);
+    setForwardTo("");
+    alert("Forwarded");
+  }
+
+  const activeTags = active ? (tagsByConv.get(active.id) || []) : [];
+  const isStarred = active ? starred.has(active.id) : false;
 
   return (
     <div className="max-w-[1600px] mx-auto">
@@ -99,6 +239,7 @@ export function InboxView({ conversations }: { conversations: InboxConversation[
                         <p className={`text-xs line-clamp-2 ${!c.is_read ? "text-slate-700" : "text-slate-500"}`}>{c.body}</p>
                         <div className="mt-1.5 flex items-center gap-1">
                           {c.campaign_name && <Badge variant="blue">{c.campaign_name}</Badge>}
+                          {starred.has(c.id) && <Star className="h-3 w-3 text-yellow-500" fill="currentColor" />}
                           {!c.is_read && <span className="ml-auto h-2 w-2 rounded-full bg-blue-500" />}
                         </div>
                       </div>
@@ -123,14 +264,87 @@ export function InboxView({ conversations }: { conversations: InboxConversation[
                   </div>
                 </div>
                 <div className="flex items-center gap-1">
-                  <Button variant="ghost" size="icon"><Star className="h-4 w-4" /></Button>
-                  <Button variant="ghost" size="icon"><Tag className="h-4 w-4" /></Button>
-                  <Button variant="ghost" size="icon"><Archive className="h-4 w-4" /></Button>
-                  <Button variant="ghost" size="icon"><MoreHorizontal className="h-4 w-4" /></Button>
+                  <Button variant="ghost" size="icon" onClick={toggleStar} aria-label="Star">
+                    <Star
+                      className={`h-4 w-4 ${isStarred ? "text-yellow-500" : ""}`}
+                      fill={isStarred ? "currentColor" : "none"}
+                    />
+                  </Button>
+
+                  <div className="relative" ref={tagPopoverRef}>
+                    <Button variant="ghost" size="icon" onClick={() => setTagOpen((v) => !v)} aria-label="Tag">
+                      <Tag className="h-4 w-4" />
+                    </Button>
+                    {tagOpen && (
+                      <div className="absolute right-0 top-full mt-1 z-20 w-48 bg-white border border-slate-200 rounded-lg shadow-lg p-2">
+                        <p className="text-xs font-medium text-slate-500 px-2 py-1">Add a tag</p>
+                        <div className="flex flex-wrap gap-1 px-1 py-1">
+                          {TAG_OPTIONS.map((t) => (
+                            <button
+                              key={t}
+                              onClick={() => addTag(t)}
+                              className="px-2 py-1 text-xs rounded-full bg-slate-100 hover:bg-blue-100 hover:text-blue-700 text-slate-700"
+                            >
+                              {t}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+
+                  <Button variant="ghost" size="icon" onClick={handleArchive} aria-label="Archive">
+                    <Archive className="h-4 w-4" />
+                  </Button>
+
+                  <div className="relative" ref={morePopoverRef}>
+                    <Button variant="ghost" size="icon" onClick={() => setMoreOpen((v) => !v)} aria-label="More">
+                      <MoreHorizontal className="h-4 w-4" />
+                    </Button>
+                    {moreOpen && (
+                      <div className="absolute right-0 top-full mt-1 z-20 w-52 bg-white border border-slate-200 rounded-lg shadow-lg py-1">
+                        <button
+                          onClick={handleMarkUnread}
+                          className="w-full text-left px-3 py-2 text-sm hover:bg-slate-50 text-slate-700"
+                        >
+                          Mark as unread
+                        </button>
+                        <button
+                          onClick={handleBlockSender}
+                          className="w-full text-left px-3 py-2 text-sm hover:bg-slate-50 text-slate-700"
+                        >
+                          Block sender
+                        </button>
+                        <button
+                          onClick={handleOpenLeadProfile}
+                          disabled={!active.lead_id}
+                          className="w-full text-left px-3 py-2 text-sm hover:bg-slate-50 text-slate-700 disabled:opacity-50 disabled:cursor-not-allowed"
+                        >
+                          Open lead profile
+                        </button>
+                      </div>
+                    )}
+                  </div>
                 </div>
               </div>
 
               <div className="flex-1 overflow-y-auto p-6 space-y-4 bg-slate-50">
+                {activeTags.length > 0 && (
+                  <div className="flex flex-wrap items-center gap-1.5">
+                    {activeTags.map((t) => (
+                      <span key={t} className="inline-flex items-center gap-1">
+                        <Badge variant="blue">{t}</Badge>
+                        <button
+                          onClick={() => removeTag(t)}
+                          className="p-0.5 rounded hover:bg-slate-200 text-slate-500"
+                          aria-label={`Remove ${t}`}
+                        >
+                          <X className="h-3 w-3" />
+                        </button>
+                      </span>
+                    ))}
+                  </div>
+                )}
                 <div className="flex">
                   <div className="max-w-[80%] bg-white rounded-2xl rounded-tl-sm px-4 py-3 shadow-sm border border-slate-100">
                     <p className="text-sm text-slate-700 leading-relaxed">{active.body}</p>
@@ -148,14 +362,65 @@ export function InboxView({ conversations }: { conversations: InboxConversation[
                     rows={3}
                     className="w-full resize-none outline-none text-sm placeholder:text-slate-400"
                   />
+                  {attachment && (
+                    <div className="flex items-center gap-1.5 mb-2">
+                      <span className="inline-flex items-center gap-1.5 px-2 py-1 bg-slate-100 rounded-md text-xs text-slate-700">
+                        <Paperclip className="h-3 w-3" />
+                        {attachment.name}
+                        <button
+                          onClick={() => setAttachment(null)}
+                          className="p-0.5 rounded hover:bg-slate-200 text-slate-500"
+                          aria-label="Remove attachment"
+                        >
+                          <X className="h-3 w-3" />
+                        </button>
+                      </span>
+                    </div>
+                  )}
+                  <input
+                    ref={fileInputRef}
+                    type="file"
+                    className="hidden"
+                    onChange={handleFileChange}
+                  />
                   <div className="flex items-center justify-between pt-2">
                     <div className="flex items-center gap-1">
-                      <Button variant="ghost" size="icon"><Paperclip className="h-4 w-4" /></Button>
-                      <Button variant="ghost" size="sm">Templates</Button>
+                      <Button variant="ghost" size="icon" onClick={handlePickFile} aria-label="Attach file">
+                        <Paperclip className="h-4 w-4" />
+                      </Button>
+                      <div className="relative" ref={templatesPopoverRef}>
+                        <Button variant="ghost" size="sm" onClick={() => setTemplatesOpen((v) => !v)}>
+                          Templates
+                        </Button>
+                        {templatesOpen && (
+                          <div className="absolute left-0 bottom-full mb-1 z-20 w-64 bg-white border border-slate-200 rounded-lg shadow-lg py-1 max-h-64 overflow-y-auto">
+                            {templates.length === 0 ? (
+                              <p className="text-xs text-slate-500 px-3 py-2">No templates available</p>
+                            ) : (
+                              templates.map((t) => (
+                                <button
+                                  key={t.id}
+                                  onClick={() => handlePickTemplate(t)}
+                                  className="w-full text-left px-3 py-2 text-sm hover:bg-slate-50 text-slate-700"
+                                >
+                                  <div className="font-medium truncate">{t.template_name}</div>
+                                  {t.subject && (
+                                    <div className="text-xs text-slate-500 truncate">{t.subject}</div>
+                                  )}
+                                </button>
+                              ))
+                            )}
+                          </div>
+                        )}
+                      </div>
                     </div>
                     <div className="flex items-center gap-1">
-                      <Button variant="outline" size="sm"><Forward className="h-3.5 w-3.5" /> Forward</Button>
-                      <Button size="sm" onClick={handleSend} disabled={!reply.trim() || pending}><Send className="h-3.5 w-3.5" /> {pending ? "Sending..." : "Send"}</Button>
+                      <Button variant="outline" size="sm" onClick={() => setForwardOpen(true)}>
+                        <Forward className="h-3.5 w-3.5" /> Forward
+                      </Button>
+                      <Button size="sm" onClick={handleSend} disabled={!reply.trim() || pending}>
+                        <Send className="h-3.5 w-3.5" /> {pending ? "Sending..." : "Send"}
+                      </Button>
                     </div>
                   </div>
                 </div>
@@ -168,6 +433,39 @@ export function InboxView({ conversations }: { conversations: InboxConversation[
           )}
         </div>
       </Card>
+
+      <Modal
+        open={forwardOpen}
+        onClose={() => setForwardOpen(false)}
+        title="Forward message"
+        size="sm"
+      >
+        <div className="p-5 space-y-4">
+          <div>
+            <label className="block text-xs font-medium text-slate-600 mb-1">Forward to (email)</label>
+            <Input
+              type="email"
+              placeholder="recipient@example.com"
+              value={forwardTo}
+              onChange={(e) => setForwardTo(e.target.value)}
+            />
+          </div>
+          <div>
+            <label className="block text-xs font-medium text-slate-600 mb-1">Subject</label>
+            <Input
+              type="text"
+              value={`Fwd: ${active?.subject || ""}`}
+              readOnly
+            />
+          </div>
+          <div className="flex items-center justify-end gap-2 pt-2">
+            <Button variant="outline" size="sm" onClick={() => setForwardOpen(false)}>Cancel</Button>
+            <Button size="sm" onClick={handleForwardSubmit} disabled={!forwardTo.trim()}>
+              <Forward className="h-3.5 w-3.5" /> Forward
+            </Button>
+          </div>
+        </div>
+      </Modal>
     </div>
   );
 }

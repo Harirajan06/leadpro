@@ -82,3 +82,29 @@ export async function bulkDeleteLeads(ids: string[]) {
   if (error) throw error;
   revalidatePath("/leads");
 }
+
+export async function bulkInsertLeads(
+  leads: Array<Partial<LeadRow>>
+): Promise<{ inserted: number; error?: string }> {
+  if (!leads.length) return { inserted: 0 };
+  const supabase = await createClient();
+  const rows = leads.map((l) => ({
+    full_name: l.full_name ?? null,
+    email: l.email ?? null,
+    phone: l.phone ?? null,
+    company_name: l.company_name ?? null,
+    industry: l.industry ?? null,
+    interest_area: l.interest_area ?? null,
+    linkedin: l.linkedin ?? null,
+    website_url: l.website_url ?? null,
+    source: "CSV Upload",
+    status: "New",
+  }));
+  const { data, error } = await supabase.from("leads").insert(rows).select("id");
+  if (error) {
+    console.error("bulkInsertLeads error:", error);
+    return { inserted: 0, error: error.message };
+  }
+  revalidatePath("/leads");
+  return { inserted: data?.length ?? 0 };
+}

@@ -13,6 +13,8 @@ interface Props {
   users: UserWithRole[];
   roles: { role_id: number; role_name: string }[];
   menus: { menu_id: number; menu_name: string }[];
+  isAdmin: boolean;
+  currentUserId: string | null;
 }
 
 const roleIcon: Record<string, React.ReactNode> = {
@@ -33,7 +35,8 @@ const actionKeys = [
   { key: "can_view", label: "View" },
 ];
 
-export function UsersView({ users, roles, menus }: Props) {
+export function UsersView({ users, roles, menus, isAdmin, currentUserId }: Props) {
+  const visibleUsers = isAdmin ? users : users.filter((u) => u.user_id === currentUserId);
   const [pending, start] = useTransition();
   const [showInvite, setShowInvite] = useState(false);
   const [permsUser, setPermsUser] = useState<UserWithRole | null>(null);
@@ -66,7 +69,7 @@ export function UsersView({ users, roles, menus }: Props) {
   }, [permsUser, menus]);
 
   const managers = users.filter((u) => u.role_name === "Manager");
-  const filtered = users.filter((u) => !search || u.full_name?.toLowerCase().includes(search.toLowerCase()) || u.email?.toLowerCase().includes(search.toLowerCase()));
+  const filtered = visibleUsers.filter((u) => !search || u.full_name?.toLowerCase().includes(search.toLowerCase()) || u.email?.toLowerCase().includes(search.toLowerCase()));
 
   async function handleInvite() {
     setError(null);
@@ -100,17 +103,24 @@ export function UsersView({ users, roles, menus }: Props) {
     });
   }
 
-  const adminCount = users.filter((u) => u.role_name === "Admin").length;
-  const managerCount = users.filter((u) => u.role_name === "Manager").length;
-  const repCount = users.filter((u) => u.role_name === "Sales Rep").length;
+  const adminCount = visibleUsers.filter((u) => u.role_name === "Admin").length;
+  const managerCount = visibleUsers.filter((u) => u.role_name === "Manager").length;
+  const repCount = visibleUsers.filter((u) => u.role_name === "Sales Rep").length;
 
   return (
     <div className="max-w-[1600px] mx-auto">
       <PageHeader
         title="User Management"
         description="Manage your team, roles, and permissions"
-        actions={<Button onClick={() => { setShowInvite(true); setError(null); setSuccess(null); }}><Plus className="h-4 w-4" /> Create User</Button>}
+        actions={isAdmin ? <Button onClick={() => { setShowInvite(true); setError(null); setSuccess(null); }}><Plus className="h-4 w-4" /> Create User</Button> : null}
       />
+
+      {!isAdmin && (
+        <div className="mb-6 flex items-start gap-2 bg-amber-50 border border-amber-200 rounded-lg p-3 text-sm text-amber-800">
+          <AlertCircle className="h-4 w-4 mt-0.5 flex-shrink-0" />
+          <span>You don&apos;t have permission to manage users. Please ask an admin.</span>
+        </div>
+      )}
 
       <div className="grid grid-cols-3 gap-4 mb-6">
         {[

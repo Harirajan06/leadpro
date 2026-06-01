@@ -5,6 +5,7 @@ import { getLeadById } from "@/lib/queries/leads";
 import { isBlocked } from "@/lib/queries/blocklist";
 import { substituteMergeTags } from "@/lib/email/merge-tags";
 import { getCurrentUserProfile } from "@/lib/queries/users";
+import { notifyCurrentUser } from "@/lib/queries/notifications";
 import { revalidatePath } from "next/cache";
 
 export async function getEmailStatus() {
@@ -57,6 +58,13 @@ export async function sendLeadEmail(leadId: string, subject: string, body: strin
 
   revalidatePath("/inbox");
   revalidatePath(`/leads/${leadId}`);
+
+  await notifyCurrentUser({
+    type: "email",
+    title: `Email sent to ${lead.full_name || lead.company_name || lead.email}`,
+    message: finalSubject,
+    link: `/leads/${leadId}`,
+  });
 
   return { ok: true, redirectedTo: result.redirectedTo };
 }

@@ -2,6 +2,7 @@
 import { createClient, createAdminClient } from "@/lib/supabase/server";
 import { sendEmail } from "./resend";
 import { substituteMergeTags } from "./merge-tags";
+import { notifyCurrentUser } from "@/lib/queries/notifications";
 import { revalidatePath } from "next/cache";
 import type { NewsletterBlock, NewsletterContent, NewsletterRow } from "@/lib/queries/newsletters";
 
@@ -178,6 +179,14 @@ export async function sendNewsletter(newsletterId: string): Promise<SendResult> 
 
   revalidatePath("/newsletters");
   revalidatePath(`/newsletters/builder`);
+
+  // Real notification
+  await notifyCurrentUser({
+    type: "newsletter",
+    title: `Newsletter "${n.title}" sent`,
+    message: `Delivered to ${sent} of ${leads.length} recipients${failed ? ` (${failed} failed)` : ""}.`,
+    link: "/newsletters",
+  });
 
   return { ok: true, total: leads.length, sent, failed, redirectedMessage: redirectedNote };
 }

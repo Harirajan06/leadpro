@@ -99,7 +99,23 @@ export async function upsertPermission(userId: string, menuId: number, perms: { 
 }
 
 export async function inviteUser(email: string, fullName: string, roleId: number, managerId: string | null) {
+  const supabase = await createClient();
   const admin = createAdminClient();
+
+  // 1. The inviter's workspace becomes the new user's workspace
+  const { data: { user: inviter } } = await supabase.auth.getUser();
+  if (!inviter) throw new Error("Must be logged in to invite users");
+  const { data: inviterProfile } = await admin
+    .from("users")
+    .select("workspace_id")
+    .eq("user_id", inviter.id)
+    .single();
+  const inviterWorkspaceId = inviterProfile?.workspace_id;
+  if (!inviterWorkspaceId) throw new Error("Inviter has no workspace");
+
+  // 2. Pre-create the public.users row so the signup trigger sees it exists
+  //    and does NOT create a new workspace. We use a placeholder user_id that
+  //    we'll fill in just before/after admin.auth.admin.createUser by upserting.
   const tempPassword = `Temp${Math.random().toString(36).slice(2, 10)}!A`;
   const { data, error } = await admin.auth.admin.createUser({
     email,
@@ -108,7 +124,8 @@ export async function inviteUser(email: string, fullName: string, roleId: number
     user_metadata: { full_name: fullName },
   });
   if (error) throw error;
-  // Upsert to avoid races with the auth trigger inserting the users row
+
+  // 3. Upsert ensures the new user is in the inviter's workspace, not their own
   const { error: upsertError } = await admin.from("users").upsert(
     {
       user_id: data.user.id,
@@ -117,10 +134,20 @@ export async function inviteUser(email: string, fullName: string, roleId: number
       role_id: roleId,
       manager_id: managerId,
       status: "ACTIVE",
+      workspace_id: inviterWorkspaceId,
     },
     { onConflict: "user_id" }
   );
   if (upsertError) throw upsertError;
+
+  // 4. If the signup trigger raced ahead and created a new workspace for the
+  //    user, delete that orphan and force them into the inviter's workspace.
+  await admin
+    .from("workspaces")
+    .delete()
+    .eq("owner_id", data.user.id)
+    .neq("id", inviterWorkspaceId);
+
   revalidatePath("/users");
   return { user: data.user, tempPassword };
 }

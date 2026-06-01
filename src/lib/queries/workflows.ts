@@ -1,5 +1,6 @@
 "use server";
 import { createClient } from "@/lib/supabase/server";
+import { notifyCurrentUser } from "@/lib/queries/notifications";
 import { revalidatePath } from "next/cache";
 
 export interface WorkflowNode {
@@ -177,6 +178,13 @@ export async function testRunWorkflow(
     revalidatePath("/workflows");
     revalidatePath(`/workflows/builder`);
   }
+
+  await notifyCurrentUser({
+    type: "workflow",
+    title: `Workflow "${workflowName}" tested`,
+    message: `${result.steps.length} step${result.steps.length === 1 ? "" : "s"} executed.`,
+    link: "/workflows",
+  });
 
   return result;
 }

@@ -1,5 +1,6 @@
 "use server";
 import { createClient } from "@/lib/supabase/server";
+import { notifyCurrentUser } from "@/lib/queries/notifications";
 import { revalidatePath } from "next/cache";
 
 export interface LeadRow {
@@ -106,5 +107,14 @@ export async function bulkInsertLeads(
     return { inserted: 0, error: error.message };
   }
   revalidatePath("/leads");
-  return { inserted: data?.length ?? 0 };
+  const inserted = data?.length ?? 0;
+  if (inserted > 0) {
+    await notifyCurrentUser({
+      type: "leads",
+      title: `${inserted} lead${inserted === 1 ? "" : "s"} imported`,
+      message: "Via CSV upload",
+      link: "/leads",
+    });
+  }
+  return { inserted };
 }

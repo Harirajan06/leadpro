@@ -1,6 +1,6 @@
 "use server";
 
-import { createClient } from "@/lib/supabase/server";
+import { createClient, createAdminClient } from "@/lib/supabase/server";
 import { revalidatePath } from "next/cache";
 
 export interface NotificationRow {
@@ -50,5 +50,66 @@ export async function markAllRead() {
     .update({ is_read: true })
     .eq("is_read", false);
   if (error) throw error;
+  revalidatePath("/", "layout");
+}
+
+/**
+ * Creates a notification for the currently logged-in user.
+ * Used by other server actions when events happen (campaign sent,
+ * newsletter sent, workflow run, etc.).
+ */
+export async function notifyCurrentUser(payload: {
+  type: string;
+  title: string;
+  message?: string;
+  link?: string;
+}) {
+  const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return;
+  // Use admin so the user_id INSERT bypasses RLS gymnastics
+  const admin = createAdminClient();
+  const { data: profile } = await admin
+    .from("users")
+    .select("workspace_id")
+    .eq("user_id", user.id)
+    .single();
+  await admin.from("notifications").insert({
+    user_id: user.id,
+    workspace_id: profile?.workspace_id,
+    type: payload.type,
+    title: payload.title,
+    message: payload.message,
+    link: payload.link,
+  });
+  revalidatePath("/", "layout");
+}
+
+/**
+ * Notifies all admins in the workspace (used for hot lead alerts, errors, etc.)
+ */
+export async function notifyWorkspaceAdmins(workspaceId: string, payload: {
+  type: string;
+  title: string;
+  message?: string;
+  link?: string;
+}) {
+  const admin = createAdminClient();
+  const { data: admins } = await admin
+    .from("users")
+    .select("user_id")
+    .eq("workspace_id", workspaceId)
+    .eq("role_id", 1);
+  if (!admins?.length) return;
+  await admin.from("notifications").insert(
+    admins.map((a: { user_id: string }) => ({
+      user_id: a.user_id,
+      workspace_id: workspaceId,
+      type: payload.type,
+      title: payload.title,
+      message: payload.message,
+      link: payload.link,
+    }))
+  );
   revalidatePath("/", "layout");
 }

@@ -62,6 +62,16 @@ export async function getInboxThread(leadId: string): Promise<InboxMessage[]> {
   return data || [];
 }
 
+export async function getUnreadInboxCount(): Promise<number> {
+  const supabase = await createClient();
+  const { count } = await supabase
+    .from("inbox_messages")
+    .select("id", { count: "exact", head: true })
+    .eq("direction", "inbound")
+    .eq("is_read", false);
+  return count ?? 0;
+}
+
 export async function markRead(id: string) {
   const supabase = await createClient();
   await supabase.from("inbox_messages").update({ is_read: true }).eq("id", id);

@@ -6,6 +6,7 @@ import { Mail, Lock, User, Eye, EyeOff, Check, AlertCircle } from "lucide-react"
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { createClient } from "@/lib/supabase/client";
+import { signUpDirect } from "@/lib/queries/auth";
 
 export default function SignupPage() {
   const router = useRouter();
@@ -23,24 +24,33 @@ export default function SignupPage() {
     setError(null);
     setLoading(true);
 
-    const supabase = createClient();
-    const { error: signupError } = await supabase.auth.signUp({
+    // 1. Server-side direct signup (no Supabase confirmation email — courtesy
+    //    notification goes to harirajanncse@gmail.com)
+    const result = await signUpDirect({
       email: form.email,
       password: form.password,
-      options: {
-        data: { full_name: form.fullName },
-        emailRedirectTo: `${window.location.origin}/auth/callback?next=/dashboard`,
-      },
+      fullName: form.fullName,
     });
-
-    setLoading(false);
-
-    if (signupError) {
-      setError(signupError.message);
+    if (!result.ok) {
+      setLoading(false);
+      setError(result.error || "Signup failed");
       return;
     }
 
-    router.push(`/check-email?email=${encodeURIComponent(form.email)}`);
+    // 2. Auto log them in via password
+    const supabase = createClient();
+    const { error: loginError } = await supabase.auth.signInWithPassword({
+      email: form.email,
+      password: form.password,
+    });
+    setLoading(false);
+    if (loginError) {
+      setError("Account created — please log in.");
+      router.push("/login");
+      return;
+    }
+    router.push("/dashboard");
+    router.refresh();
   }
 
   return (

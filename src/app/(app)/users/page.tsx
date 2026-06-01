@@ -1,14 +1,21 @@
-import { getUsers, getRoles, getMenus, getCurrentUserProfile } from "@/lib/queries/users";
+import { getUsers, getRoles, getCurrentUserProfile } from "@/lib/queries/users";
 import { UsersView } from "@/components/users/users-view";
 
 export default async function UsersPage() {
-  const [users, roles, menus, profile] = await Promise.all([
+  const [users, roles, profile] = await Promise.all([
     getUsers(),
     getRoles(),
-    getMenus(),
     getCurrentUserProfile(),
   ]);
-  const p = profile as { role_id?: number | null; roles?: { role_name?: string } | null } | null;
-  const isAdmin = p?.roles?.role_name === "Admin" || p?.role_id === 1;
-  return <UsersView users={users} roles={roles} menus={menus} isAdmin={isAdmin} currentUserId={p ? (profile as { user_id: string }).user_id : null} />;
+  const p = profile as { user_id?: string; role_id?: number | null; roles?: { role_name?: string } | null } | null;
+  const roleName = p?.roles?.role_name;
+  const isAdmin = roleName === "Super Admin" || p?.role_id === 1;
+  return (
+    <UsersView
+      users={users}
+      roles={roles}
+      isAdmin={isAdmin}
+      currentUserId={p?.user_id ?? null}
+    />
+  );
 }

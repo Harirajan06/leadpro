@@ -157,3 +157,26 @@ export async function deleteUser(userId: string) {
   await admin.auth.admin.deleteUser(userId);
   revalidatePath("/users");
 }
+
+/**
+ * Resets the user's password to a freshly-generated temp password and returns it.
+ * Only Super Admin in the same workspace should call this.
+ */
+export async function resetUserPassword(userId: string): Promise<{ tempPassword: string }> {
+  const admin = createAdminClient();
+  const tempPassword = `Temp${Math.random().toString(36).slice(2, 10)}!A`;
+  const { error } = await admin.auth.admin.updateUserById(userId, { password: tempPassword });
+  if (error) throw error;
+  return { tempPassword };
+}
+
+/** Fetch the user's auth metadata (last sign-in, email confirmed, etc.) */
+export async function getUserAuthInfo(userId: string): Promise<{ last_sign_in_at: string | null; email_confirmed_at: string | null } | null> {
+  const admin = createAdminClient();
+  const { data, error } = await admin.auth.admin.getUserById(userId);
+  if (error || !data?.user) return null;
+  return {
+    last_sign_in_at: data.user.last_sign_in_at ?? null,
+    email_confirmed_at: data.user.email_confirmed_at ?? null,
+  };
+}

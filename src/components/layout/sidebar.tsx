@@ -16,6 +16,7 @@ import {
   UserCog,
   Sparkles,
   HelpCircle,
+  Newspaper,
 } from "lucide-react";
 import { Logo } from "@/components/brand/logo";
 import { cn } from "@/lib/utils";
@@ -25,6 +26,7 @@ const navMain = [
   { label: "Leads", href: "/leads", icon: Users2 },
   { label: "Segments", href: "/segments", icon: Layers3 },
   { label: "Campaigns", href: "/campaigns", icon: Send },
+  { label: "Newsletters", href: "/newsletters", icon: Newspaper },
   { label: "Workflows", href: "/workflows", icon: Workflow },
   { label: "Inbox", href: "/inbox", icon: Inbox, badge: 4 },
   { label: "Templates", href: "/templates", icon: FileText },

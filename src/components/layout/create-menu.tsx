@@ -1,12 +1,13 @@
 "use client";
 import { useState, useEffect, useRef } from "react";
 import Link from "next/link";
-import { Plus, ChevronDown, Users2, Layers3, Send, Workflow, FileText } from "lucide-react";
+import { Plus, ChevronDown, Users2, Layers3, Send, Workflow, FileText, Newspaper } from "lucide-react";
 
 const items = [
   { label: "New lead", href: "/leads", icon: Users2 },
   { label: "New segment", href: "/segments/builder", icon: Layers3 },
   { label: "New campaign", href: "/campaigns/builder", icon: Send },
+  { label: "New newsletter", href: "/newsletters/builder", icon: Newspaper },
   { label: "New workflow", href: "/workflows/builder", icon: Workflow },
   { label: "New template", href: "/templates", icon: FileText },
 ];

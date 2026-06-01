@@ -220,6 +220,45 @@ Return JSON:
 }
 
 // ============================================================================
+// AI Newsletter Generation — produce a block-based newsletter from a goal
+// ============================================================================
+export interface AiNewsletterBlock {
+  type: "heading" | "paragraph" | "cta" | "divider";
+  text?: string;
+  url?: string;
+}
+
+export interface AiNewsletterResult {
+  title: string;
+  subject: string;
+  preheader: string;
+  blocks: AiNewsletterBlock[];
+}
+
+export async function generateNewsletter(goal: string, audience?: string): Promise<AiNewsletterResult> {
+  const system = `You are an expert B2B newsletter writer. You write engaging, valuable newsletter content for subscribers. Structure it as a series of content blocks. Keep the tone helpful and conversational. Return ONLY valid JSON.`;
+
+  const prompt = `Write a newsletter for this goal: "${goal}"${audience ? `\nTarget audience: ${audience}` : ""}
+
+Return JSON in this exact shape (5-7 blocks total):
+{
+  "title": "Internal title (3-6 words)",
+  "subject": "Email subject line that drives opens (under 60 chars)",
+  "preheader": "Preview text shown after the subject (under 90 chars)",
+  "blocks": [
+    { "type": "heading", "text": "Main headline" },
+    { "type": "paragraph", "text": "Opening paragraph that hooks the reader" },
+    { "type": "paragraph", "text": "Body paragraph with value" },
+    { "type": "cta", "text": "Read the full article", "url": "https://example.com" },
+    { "type": "divider" },
+    { "type": "paragraph", "text": "Closing paragraph" }
+  ]
+}`;
+
+  return aiJson<AiNewsletterResult>({ system, prompt, temperature: 0.8 });
+}
+
+// ============================================================================
 // Single email regeneration / improvement
 // ============================================================================
 export async function improveEmail(currentBody: string, instruction: string): Promise<string> {

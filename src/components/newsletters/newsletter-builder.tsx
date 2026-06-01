@@ -1,11 +1,12 @@
 "use client";
-import { useState, useEffect, useTransition } from "react";
+import { useState, useEffect, useTransition, useRef } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import {
   ArrowLeft, Save, Send, Sparkles, AlertCircle, CheckCircle2, Loader2, Plus, X,
-  Heading, Type, MousePointer2, Minus, Mail, Users, Layers3, Eye
+  Heading, Type, MousePointer2, Minus, Mail, Users, Layers3, Eye, Image as ImageIcon, Upload
 } from "lucide-react";
+import { uploadNewsletterImage } from "@/lib/storage/upload";
 import { Input, Select, Textarea } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
@@ -19,9 +20,17 @@ import type { SegmentRow } from "@/lib/queries/segments";
 const blockIcons: Record<string, React.ReactNode> = {
   heading: <Heading className="h-4 w-4" />,
   paragraph: <Type className="h-4 w-4" />,
+  image: <ImageIcon className="h-4 w-4" />,
   cta: <MousePointer2 className="h-4 w-4" />,
   divider: <Minus className="h-4 w-4" />,
 };
+
+interface BlockProps {
+  index: number;
+  isLocked: boolean;
+  onUpload: (idx: number) => void;
+  uploadingIdx: number | null;
+}
 
 export function NewsletterBuilder({ segments }: { segments: (SegmentRow & { contacts: number })[] }) {
   const router = useRouter();
@@ -37,6 +46,8 @@ export function NewsletterBuilder({ segments }: { segments: (SegmentRow & { cont
   const [testEmail, setTestEmail] = useState("");
 
   const [aiPrompt, setAiPrompt] = useState("");
+  const [uploadingIdx, setUploadingIdx] = useState<number | null>(null);
+  const fileInputRefs = useRef<Record<number, HTMLInputElement | null>>({});
   const [data, setData] = useState<{
     id?: string;
     title: string;
@@ -87,10 +98,32 @@ export function NewsletterBuilder({ segments }: { segments: (SegmentRow & { cont
     const defaults: Record<string, NewsletterBlock> = {
       heading: { type: "heading", text: "Section heading" },
       paragraph: { type: "paragraph", text: "Write something here..." },
+      image: { type: "image", url: "", alt: "" },
       cta: { type: "cta", text: "Read more", url: "https://example.com" },
       divider: { type: "divider" },
     };
     setData({ ...data, blocks: [...data.blocks, defaults[type]] });
+  }
+
+  async function handleImageUpload(idx: number, file: File) {
+    setUploadingIdx(idx);
+    setError(null);
+    try {
+      const fd = new FormData();
+      fd.append("file", file);
+      const result = await uploadNewsletterImage(fd);
+      if (!result.ok || !result.url) {
+        setError(result.error || "Upload failed");
+        return;
+      }
+      updateBlock(idx, { url: result.url });
+      setSuccess("Image uploaded");
+      setTimeout(() => setSuccess(null), 2000);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Upload failed");
+    } finally {
+      setUploadingIdx(null);
+    }
   }
   function moveBlock(i: number, dir: -1 | 1) {
     const next = [...data.blocks];
@@ -323,6 +356,60 @@ export function NewsletterBuilder({ segments }: { segments: (SegmentRow & { cont
                       {block.type === "paragraph" && (
                         <Textarea value={block.text || ""} onChange={(e) => updateBlock(i, { text: e.target.value })} rows={3} disabled={isLocked} />
                       )}
+                      {block.type === "image" && (
+                        <div className="space-y-2">
+                          <input
+                            type="file"
+                            accept="image/png,image/jpeg,image/jpg,image/gif,image/webp"
+                            ref={(el) => { fileInputRefs.current[i] = el; }}
+                            className="hidden"
+                            onChange={(e) => {
+                              const f = e.target.files?.[0];
+                              if (f) handleImageUpload(i, f);
+                              e.target.value = "";
+                            }}
+                          />
+                          {block.url ? (
+                            <div className="relative rounded-lg overflow-hidden border border-slate-200">
+                              {/* eslint-disable-next-line @next/next/no-img-element */}
+                              <img src={block.url} alt={block.alt || ""} className="w-full max-h-64 object-cover" />
+                              <button
+                                type="button"
+                                onClick={() => updateBlock(i, { url: "" })}
+                                disabled={isLocked}
+                                className="absolute top-2 right-2 p-1.5 rounded-md bg-white/90 hover:bg-white text-slate-700 shadow"
+                              >
+                                <X className="h-3.5 w-3.5" />
+                              </button>
+                            </div>
+                          ) : (
+                            <div className="grid grid-cols-1 sm:grid-cols-[1fr_auto] gap-2">
+                              <Input
+                                value={block.url || ""}
+                                placeholder="Paste image URL or click Upload"
+                                onChange={(e) => updateBlock(i, { url: e.target.value })}
+                                disabled={isLocked || uploadingIdx === i}
+                              />
+                              <Button
+                                type="button"
+                                variant="outline"
+                                size="sm"
+                                onClick={() => fileInputRefs.current[i]?.click()}
+                                disabled={isLocked || uploadingIdx === i}
+                              >
+                                {uploadingIdx === i ? <><Loader2 className="h-3.5 w-3.5 animate-spin" /> Uploading...</> : <><Upload className="h-3.5 w-3.5" /> Upload</>}
+                              </Button>
+                            </div>
+                          )}
+                          <Input
+                            value={block.alt || ""}
+                            placeholder="Alt text (describe the image for accessibility)"
+                            onChange={(e) => updateBlock(i, { alt: e.target.value })}
+                            disabled={isLocked}
+                            className="text-xs"
+                          />
+                        </div>
+                      )}
                       {block.type === "cta" && (
                         <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                           <Input value={block.text || ""} placeholder="Button text" onChange={(e) => updateBlock(i, { text: e.target.value })} disabled={isLocked} />
@@ -355,6 +442,7 @@ export function NewsletterBuilder({ segments }: { segments: (SegmentRow & { cont
                 {[
                   { type: "heading" as const, label: "Heading" },
                   { type: "paragraph" as const, label: "Paragraph" },
+                  { type: "image" as const, label: "Image" },
                   { type: "cta" as const, label: "CTA button" },
                   { type: "divider" as const, label: "Divider" },
                 ].map((b) => (
@@ -432,6 +520,10 @@ export function NewsletterBuilder({ segments }: { segments: (SegmentRow & { cont
                     {data.blocks.map((b, i) => {
                       if (b.type === "heading") return <h2 key={i} className="text-lg font-bold text-slate-900">{b.text}</h2>;
                       if (b.type === "paragraph") return <p key={i} className="text-sm text-slate-700 leading-relaxed">{b.text}</p>;
+                      if (b.type === "image" && b.url) {
+                        // eslint-disable-next-line @next/next/no-img-element
+                        return <img key={i} src={b.url} alt={b.alt || ""} className="w-full rounded-md my-1" />;
+                      }
                       if (b.type === "cta") return <div key={i} className="text-center my-2"><span className="inline-block px-4 py-2 bg-blue-600 text-white rounded-md text-sm font-medium">{b.text}</span></div>;
                       if (b.type === "divider") return <hr key={i} className="border-slate-100" />;
                       return null;

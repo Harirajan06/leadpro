@@ -223,9 +223,10 @@ Return JSON:
 // AI Newsletter Generation — produce a block-based newsletter from a goal
 // ============================================================================
 export interface AiNewsletterBlock {
-  type: "heading" | "paragraph" | "cta" | "divider";
+  type: "heading" | "paragraph" | "image" | "cta" | "divider";
   text?: string;
   url?: string;
+  alt?: string;
 }
 
 export interface AiNewsletterResult {

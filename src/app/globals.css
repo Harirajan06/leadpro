@@ -48,3 +48,20 @@ html, body {
 
 .no-scrollbar::-webkit-scrollbar { display: none; }
 .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+
+/* Smaller scrollbar on touch devices */
+@media (hover: none) {
+  ::-webkit-scrollbar { width: 4px; height: 4px; }
+}
+
+/* Better touch targets on mobile */
+@media (max-width: 640px) {
+  button, a { -webkit-tap-highlight-color: transparent; }
+}
+
+/* Prevent input zoom on iOS */
+@supports (-webkit-touch-callout: none) {
+  input[type="text"], input[type="email"], input[type="password"],
+  input[type="number"], input[type="search"], input[type="tel"],
+  input[type="url"], textarea, select { font-size: 16px; }
+}

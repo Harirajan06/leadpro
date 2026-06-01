@@ -98,11 +98,52 @@ export async function upsertPermission(userId: string, menuId: number, perms: { 
   revalidatePath("/users");
 }
 
-export async function inviteUser(email: string, fullName: string, roleId: number, managerId: string | null) {
+function generateTempPassword(): string {
+  // Temp + 10 alphanumerics + special + uppercase (always 16 chars)
+  const chars = "abcdefghjkmnpqrstuvwxyz23456789";
+  let rnd = "";
+  for (let i = 0; i < 10; i++) rnd += chars[Math.floor(Math.random() * chars.length)];
+  return `Temp${rnd}!A`;
+}
+
+/** Calls Supabase auth admin REST API directly — bypasses SDK quirks */
+async function adminCreateAuthUser(email: string, password: string, fullName: string): Promise<{ id: string }> {
+  const res = await fetch(`${process.env.NEXT_PUBLIC_SUPABASE_URL}/auth/v1/admin/users`, {
+    method: "POST",
+    headers: {
+      apikey: process.env.SUPABASE_SERVICE_ROLE_KEY!,
+      Authorization: `Bearer ${process.env.SUPABASE_SERVICE_ROLE_KEY!}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({ email, password, email_confirm: true, user_metadata: { full_name: fullName } }),
+  });
+  const body = await res.json();
+  if (!res.ok) throw new Error(body.msg || body.error_description || `createUser failed (${res.status})`);
+  return { id: body.id };
+}
+
+async function adminUpdateAuthPassword(userId: string, password: string): Promise<void> {
+  const res = await fetch(`${process.env.NEXT_PUBLIC_SUPABASE_URL}/auth/v1/admin/users/${userId}`, {
+    method: "PUT",
+    headers: {
+      apikey: process.env.SUPABASE_SERVICE_ROLE_KEY!,
+      Authorization: `Bearer ${process.env.SUPABASE_SERVICE_ROLE_KEY!}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({ password }),
+  });
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({}));
+    throw new Error(body.msg || body.error_description || `updatePassword failed (${res.status})`);
+  }
+}
+
+export async function inviteUser(email: string, fullName: string, roleId: number, _managerId: string | null) {
+  void _managerId;
   const supabase = await createClient();
   const admin = createAdminClient();
 
-  // 1. The inviter's workspace becomes the new user's workspace
+  // 1. Resolve inviter's workspace
   const { data: { user: inviter } } = await supabase.auth.getUser();
   if (!inviter) throw new Error("Must be logged in to invite users");
   const { data: inviterProfile } = await admin
@@ -113,26 +154,21 @@ export async function inviteUser(email: string, fullName: string, roleId: number
   const inviterWorkspaceId = inviterProfile?.workspace_id;
   if (!inviterWorkspaceId) throw new Error("Inviter has no workspace");
 
-  // 2. Pre-create the public.users row so the signup trigger sees it exists
-  //    and does NOT create a new workspace. We use a placeholder user_id that
-  //    we'll fill in just before/after admin.auth.admin.createUser by upserting.
-  const tempPassword = `Temp${Math.random().toString(36).slice(2, 10)}!A`;
-  const { data, error } = await admin.auth.admin.createUser({
-    email,
-    password: tempPassword,
-    email_confirm: true,
-    user_metadata: { full_name: fullName },
-  });
-  if (error) throw error;
+  // 2. Create the auth user via direct REST API (guarantees password is set)
+  const tempPassword = generateTempPassword();
+  const created = await adminCreateAuthUser(email, tempPassword, fullName);
 
-  // 3. Upsert ensures the new user is in the inviter's workspace, not their own
+  // 3. Defensively re-set the password right after — guarantees it sticks
+  //    even if any trigger somehow interfered with the create flow
+  await adminUpdateAuthPassword(created.id, tempPassword);
+
+  // 4. Upsert public.users into the inviter's workspace
   const { error: upsertError } = await admin.from("users").upsert(
     {
-      user_id: data.user.id,
+      user_id: created.id,
       full_name: fullName,
       email,
       role_id: roleId,
-      manager_id: managerId,
       status: "ACTIVE",
       workspace_id: inviterWorkspaceId,
     },
@@ -140,16 +176,15 @@ export async function inviteUser(email: string, fullName: string, roleId: number
   );
   if (upsertError) throw upsertError;
 
-  // 4. If the signup trigger raced ahead and created a new workspace for the
-  //    user, delete that orphan and force them into the inviter's workspace.
+  // 5. Delete orphan workspace that the signup trigger may have created
   await admin
     .from("workspaces")
     .delete()
-    .eq("owner_id", data.user.id)
+    .eq("owner_id", created.id)
     .neq("id", inviterWorkspaceId);
 
   revalidatePath("/users");
-  return { user: data.user, tempPassword };
+  return { user: { id: created.id, email }, tempPassword };
 }
 
 export async function deleteUser(userId: string) {
@@ -160,23 +195,26 @@ export async function deleteUser(userId: string) {
 
 /**
  * Resets the user's password to a freshly-generated temp password and returns it.
- * Only Super Admin in the same workspace should call this.
+ * Uses the direct REST API for the same reliability as inviteUser.
  */
 export async function resetUserPassword(userId: string): Promise<{ tempPassword: string }> {
-  const admin = createAdminClient();
-  const tempPassword = `Temp${Math.random().toString(36).slice(2, 10)}!A`;
-  const { error } = await admin.auth.admin.updateUserById(userId, { password: tempPassword });
-  if (error) throw error;
+  const tempPassword = generateTempPassword();
+  await adminUpdateAuthPassword(userId, tempPassword);
   return { tempPassword };
 }
 
 /** Fetch the user's auth metadata (last sign-in, email confirmed, etc.) */
 export async function getUserAuthInfo(userId: string): Promise<{ last_sign_in_at: string | null; email_confirmed_at: string | null } | null> {
-  const admin = createAdminClient();
-  const { data, error } = await admin.auth.admin.getUserById(userId);
-  if (error || !data?.user) return null;
+  const res = await fetch(`${process.env.NEXT_PUBLIC_SUPABASE_URL}/auth/v1/admin/users/${userId}`, {
+    headers: {
+      apikey: process.env.SUPABASE_SERVICE_ROLE_KEY!,
+      Authorization: `Bearer ${process.env.SUPABASE_SERVICE_ROLE_KEY!}`,
+    },
+  });
+  if (!res.ok) return null;
+  const u = await res.json();
   return {
-    last_sign_in_at: data.user.last_sign_in_at ?? null,
-    email_confirmed_at: data.user.email_confirmed_at ?? null,
+    last_sign_in_at: u.last_sign_in_at ?? null,
+    email_confirmed_at: u.email_confirmed_at ?? null,
   };
 }

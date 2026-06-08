@@ -349,6 +349,7 @@ const ACTIVITY_STATUS: Record<string, "success" | "danger" | "blue" | "warning" 
   failed: "danger",
   replied: "blue",
   queued: "warning",
+  skipped: "default",
 };
 
 function actionLabel(channel: string, action: string) {
@@ -376,6 +377,7 @@ function ActivityModal({ sequence, onClose }: { sequence: OutreachSequenceRow; o
           <Badge variant="success">sent</Badge>
           <Badge variant="blue">replied</Badge>
           <Badge variant="warning">queued</Badge>
+          <Badge variant="default">skipped</Badge>
           <Badge variant="danger">failed</Badge>
         </div>
         {rows === null ? (

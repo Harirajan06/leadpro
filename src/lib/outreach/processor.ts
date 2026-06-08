@@ -84,19 +84,22 @@ export async function processDueJobs(limit = 25): Promise<ProcessResult> {
       await db.from("outreach_jobs").update({ status: "sent", updated_at: nowIso }).eq("id", job.id);
       await bumpCounter(db, job.sequence_id, "sent_count");
       result.sent++;
-      await scheduleNextStep(db, job);
+    } else if (outcome.status === "skipped") {
+      // e.g. already connected/invited — not an error, just move on to the next step.
+      await db.from("outreach_jobs").update({ status: "skipped", last_error: outcome.detail, updated_at: nowIso }).eq("id", job.id);
+      result.skipped++;
     } else {
       await db.from("outreach_jobs").update({ status: "failed", last_error: outcome.detail, updated_at: nowIso }).eq("id", job.id);
       result.failed++;
-      // a failed step still advances the sequence so one bad step doesn't strand a lead
-      await scheduleNextStep(db, job);
     }
+    // every outcome advances the sequence so one step never strands the lead
+    await scheduleNextStep(db, job);
   }
 
   return result;
 }
 
-interface ExecOutcome { status: "sent" | "failed"; detail: string }
+interface ExecOutcome { status: "sent" | "failed" | "skipped"; detail: string }
 
 async function executeJob(db: Db, job: JobRow, lead: Record<string, unknown>): Promise<ExecOutcome> {
   const mergeLead = {
@@ -152,7 +155,13 @@ async function executeJob(db: Db, job: JobRow, lead: Record<string, unknown>): P
     // profile_view — resolving the profile already counts as a visit
     return { status: "sent", detail: `LinkedIn profile view → ${linkedinUrl}` };
   } catch (err) {
-    return { status: "failed", detail: err instanceof Error ? err.message : "LinkedIn action failed" };
+    const msg = err instanceof Error ? err.message : "LinkedIn action failed";
+    // Already connected / invite already pending → not a failure. Skip the
+    // connection request and let the sequence advance to the message step.
+    if (job.action === "connection_request" && /already|invitation has already|cannot be sent/i.test(msg)) {
+      return { status: "skipped", detail: `Already connected/invited — skipped to next step (${linkedinUrl})` };
+    }
+    return { status: "failed", detail: msg };
   }
 }
 

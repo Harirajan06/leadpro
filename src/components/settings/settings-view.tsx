@@ -1,6 +1,6 @@
 "use client";
-import { useState, useTransition } from "react";
-import { User, Mail, Bell, Key, ShieldCheck, Ban, CreditCard, Plus, Check, Trash2, AlertCircle, CheckCircle2, ExternalLink, Sparkles } from "lucide-react";
+import { useState, useTransition, useEffect, type ReactNode } from "react";
+import { User, Mail, Bell, Key, ShieldCheck, Ban, CreditCard, Plus, Check, Trash2, AlertCircle, CheckCircle2, ExternalLink, Sparkles, Palette, Sun, Moon, Monitor } from "lucide-react";
 import { Input, Select } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
@@ -8,10 +8,12 @@ import { Badge } from "@/components/ui/badge";
 import { PageHeader } from "@/components/ui/page-header";
 import { updateProfile, updatePassword } from "@/lib/queries/profile";
 import { addBlocklistEntry, removeBlocklistEntry, type BlocklistEntry } from "@/lib/queries/blocklist";
+import { getStoredTheme, applyTheme, type Theme } from "@/lib/theme";
 import type { IntegrationStatus } from "@/lib/queries/integrations";
 
 const sections = [
   { id: "profile", label: "Profile", icon: <User className="h-4 w-4" /> },
+  { id: "appearance", label: "Appearance", icon: <Palette className="h-4 w-4" /> },
   { id: "email", label: "Email Accounts", icon: <Mail className="h-4 w-4" /> },
   { id: "notifications", label: "Notifications", icon: <Bell className="h-4 w-4" /> },
   { id: "api", label: "API Keys", icon: <Key className="h-4 w-4" /> },
@@ -52,6 +54,12 @@ export function SettingsView({ profile, integrations, emailDomain, blocklist }: 
   const [notifs, setNotifs] = useState<Record<string, boolean>>({
     hot: true, completion: true, replies: true, digest: true, errors: false, scoring: false,
   });
+
+  const [theme, setThemeState] = useState<Theme>("system");
+  // Read the saved theme after mount (localStorage is client-only).
+  // eslint-disable-next-line react-hooks/set-state-in-effect
+  useEffect(() => { setThemeState(getStoredTheme()); }, []);
+  function selectTheme(t: Theme) { applyTheme(t); setThemeState(t); }
 
   function saveProfile() {
     setProfileMsg(null); setProfileErr(null);
@@ -185,6 +193,35 @@ export function SettingsView({ profile, integrations, emailDomain, blocklist }: 
                 </div>
               </Card>
             </>
+          )}
+
+          {active === "appearance" && (
+            <Card className="p-6">
+              <h3 className="font-semibold text-slate-900 mb-1">Appearance</h3>
+              <p className="text-sm text-slate-500 mb-5">Choose how LeadPro looks. &ldquo;System&rdquo; follows your device setting.</p>
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 max-w-2xl">
+                {([
+                  { value: "light", label: "Light", icon: <Sun className="h-5 w-5" />, preview: "bg-white border-slate-200" },
+                  { value: "dark", label: "Dark", icon: <Moon className="h-5 w-5" />, preview: "bg-slate-900 border-slate-700" },
+                  { value: "system", label: "System", icon: <Monitor className="h-5 w-5" />, preview: "bg-gradient-to-br from-white to-slate-900 border-slate-300" },
+                ] as { value: Theme; label: string; icon: ReactNode; preview: string }[]).map((opt) => (
+                  <button
+                    key={opt.value}
+                    onClick={() => selectTheme(opt.value)}
+                    className={`text-left p-4 rounded-xl border-2 transition-colors ${
+                      theme === opt.value ? "border-blue-500 bg-blue-50" : "border-slate-200 hover:bg-slate-50"
+                    }`}
+                  >
+                    <div className={`h-16 w-full rounded-lg border mb-3 ${opt.preview}`} />
+                    <div className="flex items-center justify-between">
+                      <span className="flex items-center gap-2 font-medium text-slate-900">{opt.icon} {opt.label}</span>
+                      {theme === opt.value && <Check className="h-4 w-4 text-blue-600" />}
+                    </div>
+                  </button>
+                ))}
+              </div>
+              <p className="text-xs text-slate-400 mt-4">Your choice is saved to this browser and applied instantly.</p>
+            </Card>
           )}
 
           {active === "email" && (

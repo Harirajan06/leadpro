@@ -1,5 +1,8 @@
 @import "tailwindcss";
 
+/* Enable class-based dark mode (toggled via .dark on <html>) */
+@custom-variant dark (&:where(.dark, .dark *));
+
 :root {
   --background: #f8fafc;
   --foreground: #0f172a;
@@ -13,6 +16,51 @@
   --warning: #f59e0b;
   --danger: #ef4444;
 }
+
+/* ============================================================================
+   Dark theme — remaps the slate palette + white so the app's hardcoded
+   bg-white / text-slate-* / border-slate-* utilities theme automatically.
+   Utilities reference --color-* CSS vars in Tailwind v4, so redefining them
+   under .dark flips the whole UI without per-component edits.
+   ============================================================================ */
+.dark {
+  color-scheme: dark;
+
+  /* semantic tokens (used by body + any bg-card/bg-background utilities) */
+  --background: #0b1120;
+  --foreground: #e2e8f0;
+  --card: #0f172a;
+  --muted: #1e293b;
+  --muted-foreground: #94a3b8;
+  --border: #1e293b;
+
+  /* invert the slate ramp: light shades become dark, dark shades become light */
+  --color-slate-50:  #0b1120;
+  --color-slate-100: #1e293b;
+  --color-slate-200: #334155;
+  --color-slate-300: #475569;
+  --color-slate-400: #64748b;
+  --color-slate-500: #94a3b8;
+  --color-slate-600: #cbd5e1;
+  --color-slate-700: #e2e8f0;
+  --color-slate-800: #eef2f7;
+  --color-slate-900: #f8fafc;
+}
+
+/* white surfaces → dark. Kept as an explicit rule (not via --color-white) so
+   `text-white` on colored buttons/badges stays white. */
+.dark .bg-white { background-color: #0f172a; }
+
+/* slate shades used AS backgrounds must stay dark (the ramp inversion above
+   would otherwise turn them light, e.g. the dark secondary button / overlays). */
+.dark .bg-slate-700 { background-color: #475569; }
+.dark .bg-slate-800 { background-color: #334155; }
+.dark .bg-slate-900 { background-color: #1e293b; }
+.dark .bg-slate-900\/40 { background-color: rgb(2 6 23 / 0.6); }
+
+/* dark scrollbar */
+.dark ::-webkit-scrollbar-thumb { background: #334155; }
+.dark ::-webkit-scrollbar-thumb:hover { background: #475569; }
 
 @theme inline {
   --color-background: var(--background);
@@ -65,3 +113,78 @@ html, body {
   input[type="number"], input[type="search"], input[type="tel"],
   input[type="url"], textarea, select { font-size: 16px; }
 }
+
+/* ============================================================================
+   Auth hero animations
+   ============================================================================ */
+
+/* Floating gradient blobs that drift slowly */
+@keyframes blob-float-1 {
+  0%, 100% { transform: translate(0, 0) scale(1); }
+  33%      { transform: translate(60px, -40px) scale(1.1); }
+  66%      { transform: translate(-30px, 50px) scale(0.95); }
+}
+@keyframes blob-float-2 {
+  0%, 100% { transform: translate(0, 0) scale(1); }
+  33%      { transform: translate(-50px, 60px) scale(1.15); }
+  66%      { transform: translate(40px, -30px) scale(0.9); }
+}
+@keyframes blob-float-3 {
+  0%, 100% { transform: translate(0, 0) scale(1); }
+  50%      { transform: translate(40px, 30px) scale(1.2); }
+}
+.animate-blob-1 { animation: blob-float-1 18s ease-in-out infinite; }
+.animate-blob-2 { animation: blob-float-2 22s ease-in-out infinite; }
+.animate-blob-3 { animation: blob-float-3 16s ease-in-out infinite; }
+
+/* Reveal: fade up with slight blur to feel premium */
+@keyframes fade-up {
+  0%   { opacity: 0; transform: translateY(16px); filter: blur(6px); }
+  100% { opacity: 1; transform: translateY(0); filter: blur(0); }
+}
+.animate-fade-up { animation: fade-up 0.7s ease-out both; }
+
+/* Stagger by index for lists */
+.stagger > * { opacity: 0; animation: fade-up 0.55s ease-out both; }
+.stagger > *:nth-child(1) { animation-delay: 0.10s; }
+.stagger > *:nth-child(2) { animation-delay: 0.20s; }
+.stagger > *:nth-child(3) { animation-delay: 0.30s; }
+.stagger > *:nth-child(4) { animation-delay: 0.40s; }
+.stagger > *:nth-child(5) { animation-delay: 0.50s; }
+
+/* Rotating word: fade + slight rise */
+@keyframes word-rotate {
+  0%   { opacity: 0; transform: translateY(8px); }
+  15%  { opacity: 1; transform: translateY(0); }
+  85%  { opacity: 1; transform: translateY(0); }
+  100% { opacity: 0; transform: translateY(-8px); }
+}
+.animate-word { animation: word-rotate 2.4s ease-in-out both; }
+
+/* Shimmer line for headline accent */
+@keyframes shimmer {
+  0%   { background-position: 0% 50%; }
+  100% { background-position: 200% 50%; }
+}
+.bg-shimmer {
+  background: linear-gradient(90deg, #93c5fd 0%, #ffffff 50%, #93c5fd 100%);
+  background-size: 200% 100%;
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  animation: shimmer 3.5s linear infinite;
+}
+
+/* Floating stat card that gently breathes */
+@keyframes float-gentle {
+  0%, 100% { transform: translateY(0); }
+  50%      { transform: translateY(-6px); }
+}
+.animate-float-gentle { animation: float-gentle 4.5s ease-in-out infinite; }
+
+/* Pulse ring around live dot */
+@keyframes pulse-ring {
+  0%   { transform: scale(0.8); opacity: 0.6; }
+  100% { transform: scale(2.2); opacity: 0; }
+}
+.animate-pulse-ring { animation: pulse-ring 1.8s cubic-bezier(0.4, 0, 0.6, 1) infinite; }

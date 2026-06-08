@@ -8,7 +8,12 @@
       "Bash(curl -sI http://localhost:3000/capture)",
       "Bash(git add *)",
       "Bash(git commit -m ' *)",
-      "Bash(git push *)"
+      "Bash(git push *)",
+      "Read(//private/tmp/**)",
+      "Bash(rm -rf bp)",
+      "Bash(mkdir bp *)",
+      "Bash(unzip -o -q \"/Users/apple/Downloads/Ai Lead Nurture Platform Product Blueprint.docx\" -d bp)",
+      "Bash(python3 -c ' *)"
     ]
   }
 }

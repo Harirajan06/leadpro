@@ -188,3 +188,47 @@ html, body {
   100% { transform: scale(2.2); opacity: 0; }
 }
 .animate-pulse-ring { animation: pulse-ring 1.8s cubic-bezier(0.4, 0, 0.6, 1) infinite; }
+
+/* ============================================================================
+   Public landing page — always renders in light mode, regardless of the user's
+   theme preference. Marketing surfaces shouldn't surprise visitors with the
+   logged-in user's dark UI.
+   ============================================================================ */
+.landing-page,
+.dark .landing-page {
+  /* Reset slate ramp to light values even when html has .dark */
+  --color-slate-50:  #f8fafc !important;
+  --color-slate-100: #f1f5f9 !important;
+  --color-slate-200: #e2e8f0 !important;
+  --color-slate-300: #cbd5e1 !important;
+  --color-slate-400: #94a3b8 !important;
+  --color-slate-500: #64748b !important;
+  --color-slate-600: #475569 !important;
+  --color-slate-700: #334155 !important;
+  --color-slate-800: #1e293b !important;
+  --color-slate-900: #0f172a !important;
+  --background: #ffffff !important;
+  --foreground: #0f172a !important;
+  --card: #ffffff !important;
+  --border: #e2e8f0 !important;
+  background-color: #ffffff !important;
+  color: #0f172a !important;
+  color-scheme: light;
+}
+
+/* Wrapper itself uses bg-white — override the .dark rule for self-match */
+.dark .landing-page.bg-white,
+.dark .landing-page .bg-white { background-color: #ffffff !important; }
+.dark .landing-page .bg-slate-50 { background-color: #f8fafc !important; }
+.dark .landing-page .bg-slate-100 { background-color: #f1f5f9 !important; }
+.dark .landing-page .bg-slate-200 { background-color: #e2e8f0 !important; }
+.dark .landing-page .bg-slate-900 { background-color: #0f172a !important; }
+.dark .landing-page .bg-slate-800 { background-color: #1e293b !important; }
+.dark .landing-page .bg-white\/80 { background-color: rgb(255 255 255 / 0.8) !important; }
+.dark .landing-page .text-slate-900 { color: #0f172a !important; }
+.dark .landing-page .text-slate-700 { color: #334155 !important; }
+.dark .landing-page .text-slate-600 { color: #475569 !important; }
+.dark .landing-page .text-slate-500 { color: #64748b !important; }
+.dark .landing-page .text-slate-400 { color: #94a3b8 !important; }
+.dark .landing-page .border-slate-100 { border-color: #f1f5f9 !important; }
+.dark .landing-page .border-slate-200 { border-color: #e2e8f0 !important; }

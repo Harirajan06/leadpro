@@ -7,9 +7,9 @@ import { getUnreadInboxCount } from "@/lib/queries/inbox";
 import { Sparkles, HelpCircle } from "lucide-react";
 import { Logo } from "@/components/brand/logo";
 import { cn } from "@/lib/utils";
-import { navMainItems, navAdminItems, filterNavByRole } from "@/lib/nav-config";
+import { navMainItems, navAdminItems, filterNavByRoleAndOverrides } from "@/lib/nav-config";
 
-export function Sidebar({ role }: { role?: string }) {
+export function Sidebar({ role, navAccess }: { role?: string; navAccess?: Record<string, boolean> | null }) {
   const pathname = usePathname();
   const [credits, setCredits] = useState<{ used: number; total: number } | null>(null);
   const [inboxUnread, setInboxUnread] = useState<number>(0);
@@ -21,8 +21,8 @@ export function Sidebar({ role }: { role?: string }) {
     return () => { cancelled = true; };
   }, []);
 
-  const main = filterNavByRole(navMainItems, role);
-  const admin = filterNavByRole(navAdminItems, role);
+  const main = filterNavByRoleAndOverrides(navMainItems, role, navAccess);
+  const admin = filterNavByRoleAndOverrides(navAdminItems, role, navAccess);
 
   return (
     <aside className="hidden lg:flex w-64 bg-white border-r border-slate-200 flex-col h-screen sticky top-0">

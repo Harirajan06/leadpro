@@ -1,13 +1,14 @@
 "use client";
 import { useState, useEffect, useTransition } from "react";
-import { Search, Plus, Shield, ShieldCheck, User, AlertCircle, CheckCircle2, Copy, Check, KeyRound, Trash2, Calendar, Mail, RefreshCw } from "lucide-react";
+import { Search, Plus, Shield, ShieldCheck, User, AlertCircle, CheckCircle2, Copy, Check, KeyRound, Trash2, Calendar, Mail, RefreshCw, Lock } from "lucide-react";
 import { Input, Select } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Card } from "@/components/ui/card";
 import { PageHeader } from "@/components/ui/page-header";
 import { Modal } from "@/components/ui/modal";
-import { inviteUser, deleteUser, resetUserPassword, getUserAuthInfo, type UserWithRole } from "@/lib/queries/users";
+import { inviteUser, deleteUser, resetUserPassword, getUserAuthInfo, updateUserNavAccess, type UserWithRole } from "@/lib/queries/users";
+import { navMainItems, navAdminItems } from "@/lib/nav-config";
 
 interface Props {
   users: UserWithRole[];
@@ -45,10 +46,23 @@ export function UsersView({ users, roles, isAdmin, currentUserId }: Props) {
   const [authInfo, setAuthInfo] = useState<{ last_sign_in_at: string | null; email_confirmed_at: string | null } | null>(null);
   const [resetPw, setResetPw] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
+  const [navAccess, setNavAccess] = useState<Record<string, boolean>>({});
+  const [savedNavAccess, setSavedNavAccess] = useState<Record<string, boolean>>({});
+  const [permsMsg, setPermsMsg] = useState<string | null>(null);
 
   useEffect(() => {
-    if (!detailUser) { setAuthInfo(null); setResetPw(null); return; }
+    if (!detailUser) {
+      setAuthInfo(null);
+      setResetPw(null);
+      setNavAccess({});
+      setSavedNavAccess({});
+      setPermsMsg(null);
+      return;
+    }
     getUserAuthInfo(detailUser.user_id).then(setAuthInfo).catch(() => setAuthInfo(null));
+    const initial = (detailUser.nav_access || {}) as Record<string, boolean>;
+    setNavAccess({ ...initial });
+    setSavedNavAccess({ ...initial });
   }, [detailUser]);
 
   const filtered = visibleUsers.filter((u) => !search || u.full_name?.toLowerCase().includes(search.toLowerCase()) || u.email?.toLowerCase().includes(search.toLowerCase()));
@@ -90,6 +104,35 @@ export function UsersView({ users, roles, isAdmin, currentUserId }: Props) {
     if (!resetPw) return;
     try { await navigator.clipboard.writeText(resetPw); setCopied(true); setTimeout(() => setCopied(false), 2000); } catch {}
   }
+
+  function togglePerm(href: string, allowed: boolean) {
+    setNavAccess((prev) => ({ ...prev, [href]: allowed }));
+    setPermsMsg(null);
+  }
+
+  function clearPerm(href: string) {
+    setNavAccess((prev) => {
+      const next = { ...prev };
+      delete next[href];
+      return next;
+    });
+    setPermsMsg(null);
+  }
+
+  async function handleSavePerms() {
+    if (!detailUser) return;
+    start(async () => {
+      try {
+        await updateUserNavAccess(detailUser.user_id, navAccess);
+        setSavedNavAccess({ ...navAccess });
+        setPermsMsg("Permissions saved. Changes apply on the user's next page load.");
+      } catch (err) {
+        setPermsMsg(err instanceof Error ? err.message : "Save failed");
+      }
+    });
+  }
+
+  const permsDirty = JSON.stringify(navAccess) !== JSON.stringify(savedNavAccess);
 
   const adminCount = visibleUsers.filter((u) => u.role_name === "Super Admin").length;
   const marketingCount = visibleUsers.filter((u) => u.role_name === "Marketing Admin").length;
@@ -280,6 +323,53 @@ export function UsersView({ users, roles, isAdmin, currentUserId }: Props) {
                 </Button>
               )}
             </div>
+
+            {/* Permissions section — Super Admin only */}
+            {isAdmin && (
+              <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+                <div className="flex items-start gap-2 mb-3">
+                  <Lock className="h-4 w-4 mt-0.5 text-blue-700 flex-shrink-0" />
+                  <div className="flex-1">
+                    <p className="text-sm font-semibold text-blue-900 mb-1">Tab access</p>
+                    <p className="text-xs text-blue-800">
+                      Override which tabs this user can access. Leave on <strong>Role default</strong> to follow the role&apos;s normal permissions, or explicitly <strong>Allow</strong> / <strong>Deny</strong> a specific tab.
+                    </p>
+                  </div>
+                </div>
+
+                <PermsGroup
+                  title="Workspace"
+                  items={navMainItems}
+                  navAccess={navAccess}
+                  userRole={detailUser.role_name}
+                  onToggle={togglePerm}
+                  onClear={clearPerm}
+                />
+                <PermsGroup
+                  title="Admin"
+                  items={navAdminItems}
+                  navAccess={navAccess}
+                  userRole={detailUser.role_name}
+                  onToggle={togglePerm}
+                  onClear={clearPerm}
+                />
+
+                {permsMsg && (
+                  <div className="mt-3 text-xs text-blue-900 bg-white border border-blue-200 rounded-md px-3 py-2">{permsMsg}</div>
+                )}
+
+                <div className="mt-3 flex items-center justify-end gap-2">
+                  {permsDirty && (
+                    <Button variant="outline" onClick={() => setNavAccess({ ...savedNavAccess })} disabled={pending}>
+                      Revert
+                    </Button>
+                  )}
+                  <Button onClick={handleSavePerms} disabled={pending || !permsDirty}>
+                    {pending ? <><RefreshCw className="h-4 w-4 animate-spin" /> Saving...</> : <>Save permissions</>}
+                  </Button>
+                </div>
+              </div>
+            )}
           </div>
         )}
         <div className="p-5 border-t border-slate-100 flex justify-between items-center">
@@ -291,6 +381,90 @@ export function UsersView({ users, roles, isAdmin, currentUserId }: Props) {
           <Button variant="outline" onClick={() => setDetailUser(null)}>Close</Button>
         </div>
       </Modal>
+    </div>
+  );
+}
+
+type NavItemLite = { label: string; href: string; roles: string[] };
+
+function PermsGroup({
+  title,
+  items,
+  navAccess,
+  userRole,
+  onToggle,
+  onClear,
+}: {
+  title: string;
+  items: NavItemLite[];
+  navAccess: Record<string, boolean>;
+  userRole: string;
+  onToggle: (href: string, allowed: boolean) => void;
+  onClear: (href: string) => void;
+}) {
+  return (
+    <div className="mb-3 last:mb-0">
+      <p className="text-[11px] font-semibold uppercase tracking-wider text-blue-900/70 mb-1.5">{title}</p>
+      <div className="bg-white rounded-md border border-blue-100 divide-y divide-blue-50">
+        {items.map((item) => {
+          const hasOverride = Object.prototype.hasOwnProperty.call(navAccess, item.href);
+          const override = hasOverride ? navAccess[item.href] : undefined;
+          const roleDefault = item.roles.includes(userRole);
+          const current: "default" | "allow" | "deny" =
+            override === true ? "allow" : override === false ? "deny" : "default";
+          const effective = current === "allow" ? true : current === "deny" ? false : roleDefault;
+          return (
+            <div key={item.href} className="flex items-center justify-between gap-3 px-3 py-2">
+              <div className="min-w-0">
+                <p className="text-sm font-medium text-slate-900 truncate">{item.label}</p>
+                <p className="text-[11px] text-slate-500">
+                  Role default: <span className={roleDefault ? "text-emerald-700" : "text-slate-500"}>{roleDefault ? "Allowed" : "Denied"}</span>
+                  {" · "}
+                  Effective: <span className={effective ? "text-emerald-700" : "text-rose-700"}>{effective ? "Allowed" : "Denied"}</span>
+                </p>
+              </div>
+              <div className="flex items-center gap-1 text-xs">
+                <button
+                  type="button"
+                  onClick={() => onClear(item.href)}
+                  className={
+                    "px-2 py-1 rounded-md border transition-colors " +
+                    (current === "default"
+                      ? "bg-slate-900 text-white border-slate-900"
+                      : "bg-white text-slate-600 border-slate-200 hover:bg-slate-50")
+                  }
+                >
+                  Default
+                </button>
+                <button
+                  type="button"
+                  onClick={() => onToggle(item.href, true)}
+                  className={
+                    "px-2 py-1 rounded-md border transition-colors " +
+                    (current === "allow"
+                      ? "bg-emerald-600 text-white border-emerald-600"
+                      : "bg-white text-slate-600 border-slate-200 hover:bg-slate-50")
+                  }
+                >
+                  Allow
+                </button>
+                <button
+                  type="button"
+                  onClick={() => onToggle(item.href, false)}
+                  className={
+                    "px-2 py-1 rounded-md border transition-colors " +
+                    (current === "deny"
+                      ? "bg-rose-600 text-white border-rose-600"
+                      : "bg-white text-slate-600 border-slate-200 hover:bg-slate-50")
+                  }
+                >
+                  Deny
+                </button>
+              </div>
+            </div>
+          );
+        })}
+      </div>
     </div>
   );
 }

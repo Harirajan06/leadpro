@@ -7,9 +7,9 @@ import { getAiCreditsUsage } from "@/lib/queries/credits";
 import { getUnreadInboxCount } from "@/lib/queries/inbox";
 import { Logo } from "@/components/brand/logo";
 import { cn } from "@/lib/utils";
-import { navMainItems, navAdminItems, filterNavByRole } from "@/lib/nav-config";
+import { navMainItems, navAdminItems, filterNavByRoleAndOverrides } from "@/lib/nav-config";
 
-export function MobileSidebar({ open, onClose, role }: { open: boolean; onClose: () => void; role?: string }) {
+export function MobileSidebar({ open, onClose, role, navAccess }: { open: boolean; onClose: () => void; role?: string; navAccess?: Record<string, boolean> | null }) {
   const pathname = usePathname();
   const [credits, setCredits] = useState<{ used: number; total: number } | null>(null);
   const [inboxUnread, setInboxUnread] = useState<number>(0);
@@ -29,8 +29,8 @@ export function MobileSidebar({ open, onClose, role }: { open: boolean; onClose:
     return () => { document.body.style.overflow = ""; };
   }, [open]);
 
-  const main = filterNavByRole(navMainItems, role);
-  const admin = filterNavByRole(navAdminItems, role);
+  const main = filterNavByRoleAndOverrides(navMainItems, role, navAccess);
+  const admin = filterNavByRoleAndOverrides(navAdminItems, role, navAccess);
 
   return (
     <>

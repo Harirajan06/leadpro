@@ -39,3 +39,24 @@ export function filterNavByRole(items: NavItem[], role: Role | null | undefined)
   if (!role) return items;
   return items.filter((i) => i.roles.includes(role));
 }
+
+/**
+ * Apply per-user overrides on top of role defaults.
+ * - If navAccess[item.href] === true, item is allowed (even if role doesn't normally allow it)
+ * - If navAccess[item.href] === false, item is denied (even if role allows it)
+ * - If navAccess has no key, falls back to role default
+ */
+export function filterNavByRoleAndOverrides(
+  items: NavItem[],
+  role: Role | null | undefined,
+  navAccess?: Record<string, boolean> | null
+): NavItem[] {
+  return items.filter((i) => {
+    const override = navAccess && Object.prototype.hasOwnProperty.call(navAccess, i.href)
+      ? navAccess[i.href]
+      : undefined;
+    if (override === true) return true;
+    if (override === false) return false;
+    return !role || i.roles.includes(role);
+  });
+}

@@ -10,6 +10,7 @@ export interface UserRow {
   manager_id: string | null;
   status: string;
   last_login: string | null;
+  nav_access?: Record<string, boolean> | null;
   created_at: string;
   updated_at: string;
 }
@@ -191,6 +192,19 @@ export async function deleteUser(userId: string) {
   const admin = createAdminClient();
   await admin.auth.admin.deleteUser(userId);
   revalidatePath("/users");
+}
+
+/**
+ * Save per-user nav access overrides. Pass an object where each key is the
+ * nav href and the value is true (allow) or false (deny). Keys not present
+ * fall back to the user's role default.
+ */
+export async function updateUserNavAccess(userId: string, navAccess: Record<string, boolean>) {
+  const admin = createAdminClient();
+  const { error } = await admin.from("users").update({ nav_access: navAccess }).eq("user_id", userId);
+  if (error) throw error;
+  revalidatePath("/users");
+  revalidatePath("/", "layout");
 }
 
 /**

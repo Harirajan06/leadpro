@@ -7,10 +7,9 @@ export default async function AppLayout({ children }: { children: React.ReactNod
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) redirect("/login");
 
-  // Fetch profile
   const { data: profile } = await supabase
     .from("users")
-    .select("full_name, email, role_id, roles(role_name)")
+    .select("full_name, email, role_id, nav_access, roles(role_name)")
     .eq("user_id", user.id)
     .single();
 
@@ -18,9 +17,16 @@ export default async function AppLayout({ children }: { children: React.ReactNod
   const userEmail = profile?.email || user.email || "";
   const userRole =
     (profile as { roles?: { role_name?: string } } | null)?.roles?.role_name || "User";
+  const navAccess =
+    (profile as { nav_access?: Record<string, boolean> | null } | null)?.nav_access ?? null;
 
   return (
-    <AppShell userName={userName} userEmail={userEmail} userRole={userRole}>
+    <AppShell
+      userName={userName}
+      userEmail={userEmail}
+      userRole={userRole}
+      navAccess={navAccess}
+    >
       {children}
     </AppShell>
   );

@@ -9,7 +9,9 @@ import { Badge } from "@/components/ui/badge";
 import { Card } from "@/components/ui/card";
 import { Tabs } from "@/components/ui/tabs";
 import { PageHeader } from "@/components/ui/page-header";
+import { useFeedback } from "@/components/ui/feedback";
 import { setCampaignStatus, deleteCampaign, duplicateCampaign, type CampaignRow } from "@/lib/queries/campaigns";
+import { formatDate } from "@/lib/utils";
 
 function todayStr() { const d = new window.Date(); return d.toISOString().slice(0,10); }
 
@@ -24,6 +26,7 @@ export function CampaignsView({ campaigns, stats }: {
   campaigns: CampaignRow[];
   stats: { active: number; totalSent: number; avgOpen: number; avgReply: number };
 }) {
+  const { confirm } = useFeedback();
   const [tab, setTab] = useState("sequences");
   const [pending, start] = useTransition();
   const [search, setSearch] = useState("");
@@ -49,8 +52,8 @@ export function CampaignsView({ campaigns, stats }: {
       await setCampaignStatus(c.id, c.status === "Active" ? "Paused" : "Active");
     });
   }
-  function handleDelete(id: string) {
-    if (!confirm("Delete this campaign?")) return;
+  async function handleDelete(id: string) {
+    if (!(await confirm({ title: "Delete campaign?", message: "Delete this campaign?", confirmLabel: "Delete", danger: true }))) return;
     start(async () => { await deleteCampaign(id); });
   }
   function handleDuplicate(id: string) {
@@ -157,7 +160,7 @@ export function CampaignsView({ campaigns, stats }: {
                     <td className="px-4 py-3">
                       <Link href={`/campaigns/builder?id=${c.id}`} className="block group">
                         <p className="font-medium text-slate-900 group-hover:text-blue-600">{c.campaign_name}</p>
-                        <p className="text-xs text-slate-500 mt-0.5">Modified {new Date(c.updated_at).toLocaleDateString()}</p>
+                        <p className="text-xs text-slate-500 mt-0.5">Modified {formatDate(c.updated_at)}</p>
                       </Link>
                     </td>
                     <td className="px-4 py-3"><Badge variant={statusVariant[c.status] || "default"}>{c.status}</Badge></td>

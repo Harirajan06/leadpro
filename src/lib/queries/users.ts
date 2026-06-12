@@ -20,6 +20,44 @@ export interface UserWithRole extends UserRow {
   manager_name: string | null;
 }
 
+/**
+ * Authorization guard for privileged user-management actions.
+ * Verifies the caller is authenticated AND a Super Admin (role_id = 1),
+ * and returns their identity + workspace so callers can scope by workspace.
+ * Throws if the caller is not allowed — never rely on UI hiding alone.
+ */
+async function requireSuperAdmin(): Promise<{ userId: string; workspaceId: string }> {
+  const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) throw new Error("Not authenticated");
+
+  // Use the admin client so a restrictive RLS policy can't mask the caller's
+  // own role row; we are reading the caller's own record by their auth uid.
+  const admin = createAdminClient();
+  const { data: profile } = await admin
+    .from("users")
+    .select("role_id, workspace_id")
+    .eq("user_id", user.id)
+    .single();
+
+  if (!profile?.workspace_id) throw new Error("No workspace");
+  if (profile.role_id !== 1) throw new Error("Forbidden: Super Admin only");
+  return { userId: user.id, workspaceId: profile.workspace_id as string };
+}
+
+/** Ensure a target user belongs to the given workspace (prevents cross-tenant IDOR). */
+async function assertTargetInWorkspace(targetUserId: string, workspaceId: string) {
+  const admin = createAdminClient();
+  const { data: target } = await admin
+    .from("users")
+    .select("workspace_id")
+    .eq("user_id", targetUserId)
+    .single();
+  if (!target || target.workspace_id !== workspaceId) {
+    throw new Error("Forbidden: user is outside your workspace");
+  }
+}
+
 export async function getUsers(): Promise<UserWithRole[]> {
   const supabase = await createClient();
   const { data, error } = await supabase
@@ -141,19 +179,13 @@ async function adminUpdateAuthPassword(userId: string, password: string): Promis
 
 export async function inviteUser(email: string, fullName: string, roleId: number, _managerId: string | null) {
   void _managerId;
-  const supabase = await createClient();
   const admin = createAdminClient();
 
-  // 1. Resolve inviter's workspace
-  const { data: { user: inviter } } = await supabase.auth.getUser();
-  if (!inviter) throw new Error("Must be logged in to invite users");
-  const { data: inviterProfile } = await admin
-    .from("users")
-    .select("workspace_id")
-    .eq("user_id", inviter.id)
-    .single();
-  const inviterWorkspaceId = inviterProfile?.workspace_id;
-  if (!inviterWorkspaceId) throw new Error("Inviter has no workspace");
+  // 1. Only a Super Admin may invite users; scope to their workspace.
+  const { workspaceId: inviterWorkspaceId } = await requireSuperAdmin();
+
+  // Only allow assigning one of the known roles (1 Super, 2 Marketing, 3 Sales)
+  if (![1, 2, 3].includes(roleId)) throw new Error("Invalid role");
 
   // 2. Create the auth user via direct REST API (guarantees password is set)
   const tempPassword = generateTempPassword();
@@ -189,6 +221,10 @@ export async function inviteUser(email: string, fullName: string, roleId: number
 }
 
 export async function deleteUser(userId: string) {
+  const { userId: callerId, workspaceId } = await requireSuperAdmin();
+  if (userId === callerId) throw new Error("You cannot delete your own account");
+  await assertTargetInWorkspace(userId, workspaceId);
+
   const admin = createAdminClient();
   await admin.auth.admin.deleteUser(userId);
   revalidatePath("/users");
@@ -200,6 +236,9 @@ export async function deleteUser(userId: string) {
  * fall back to the user's role default.
  */
 export async function updateUserNavAccess(userId: string, navAccess: Record<string, boolean>) {
+  const { workspaceId } = await requireSuperAdmin();
+  await assertTargetInWorkspace(userId, workspaceId);
+
   const admin = createAdminClient();
   const { error } = await admin.from("users").update({ nav_access: navAccess }).eq("user_id", userId);
   if (error) throw error;
@@ -212,6 +251,9 @@ export async function updateUserNavAccess(userId: string, navAccess: Record<stri
  * Uses the direct REST API for the same reliability as inviteUser.
  */
 export async function resetUserPassword(userId: string): Promise<{ tempPassword: string }> {
+  const { workspaceId } = await requireSuperAdmin();
+  await assertTargetInWorkspace(userId, workspaceId);
+
   const tempPassword = generateTempPassword();
   await adminUpdateAuthPassword(userId, tempPassword);
   return { tempPassword };
@@ -219,6 +261,9 @@ export async function resetUserPassword(userId: string): Promise<{ tempPassword:
 
 /** Fetch the user's auth metadata (last sign-in, email confirmed, etc.) */
 export async function getUserAuthInfo(userId: string): Promise<{ last_sign_in_at: string | null; email_confirmed_at: string | null } | null> {
+  const { workspaceId } = await requireSuperAdmin();
+  await assertTargetInWorkspace(userId, workspaceId);
+
   const res = await fetch(`${process.env.NEXT_PUBLIC_SUPABASE_URL}/auth/v1/admin/users/${userId}`, {
     headers: {
       apikey: process.env.SUPABASE_SERVICE_ROLE_KEY!,

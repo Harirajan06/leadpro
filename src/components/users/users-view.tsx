@@ -7,8 +7,10 @@ import { Badge } from "@/components/ui/badge";
 import { Card } from "@/components/ui/card";
 import { PageHeader } from "@/components/ui/page-header";
 import { Modal } from "@/components/ui/modal";
+import { useFeedback } from "@/components/ui/feedback";
 import { inviteUser, deleteUser, resetUserPassword, getUserAuthInfo, updateUserNavAccess, type UserWithRole } from "@/lib/queries/users";
 import { navMainItems, navAdminItems } from "@/lib/nav-config";
+import { formatDate, formatDateTime } from "@/lib/utils";
 
 interface Props {
   users: UserWithRole[];
@@ -36,6 +38,7 @@ const roleAccessSummary: Record<string, string[]> = {
 
 export function UsersView({ users, roles, isAdmin, currentUserId }: Props) {
   const visibleUsers = isAdmin ? users : users.filter((u) => u.user_id === currentUserId);
+  const { toast, confirm } = useFeedback();
   const [pending, start] = useTransition();
   const [showInvite, setShowInvite] = useState(false);
   const [form, setForm] = useState({ fullName: "", email: "", roleId: roles.find((r) => r.role_name === "Sales Admin")?.role_id ?? 3 });
@@ -83,19 +86,19 @@ export function UsersView({ users, roles, isAdmin, currentUserId }: Props) {
   }
 
   async function handleDelete(userId: string) {
-    if (!confirm("Delete this user permanently?")) return;
+    if (!(await confirm({ title: "Delete user?", message: "Delete this user permanently?", confirmLabel: "Delete", danger: true }))) return;
     start(async () => { await deleteUser(userId); setDetailUser(null); });
   }
 
   async function handleReset() {
     if (!detailUser) return;
-    if (!confirm("Generate a new temporary password for this user? Their old password will stop working immediately.")) return;
+    if (!(await confirm({ title: "Reset password?", message: "Generate a new temporary password for this user? Their old password will stop working immediately.", confirmLabel: "Generate" }))) return;
     start(async () => {
       try {
         const r = await resetUserPassword(detailUser.user_id);
         setResetPw(r.tempPassword);
       } catch (err) {
-        alert(err instanceof Error ? err.message : "Reset failed");
+        toast(err instanceof Error ? err.message : "Reset failed", "error");
       }
     });
   }
@@ -217,7 +220,7 @@ export function UsersView({ users, roles, isAdmin, currentUserId }: Props) {
                       {u.status === "ACTIVE" ? "Active" : "Inactive"}
                     </span>
                   </td>
-                  <td className="px-4 py-3 text-slate-500">{u.created_at ? new Date(u.created_at).toLocaleDateString() : "—"}</td>
+                  <td className="px-4 py-3 text-slate-500">{u.created_at ? formatDate(u.created_at) : "—"}</td>
                 </tr>
               ))}
             </tbody>
@@ -286,15 +289,15 @@ export function UsersView({ users, roles, isAdmin, currentUserId }: Props) {
               </div>
               <div className="bg-slate-50 rounded-lg p-3">
                 <div className="flex items-center gap-1.5 text-xs text-slate-500 mb-1"><Calendar className="h-3.5 w-3.5" /> Created</div>
-                <p className="font-medium text-slate-900">{detailUser.created_at ? new Date(detailUser.created_at).toLocaleString() : "—"}</p>
+                <p className="font-medium text-slate-900">{detailUser.created_at ? formatDateTime(detailUser.created_at) : "—"}</p>
               </div>
               <div className="bg-slate-50 rounded-lg p-3">
                 <div className="flex items-center gap-1.5 text-xs text-slate-500 mb-1"><Calendar className="h-3.5 w-3.5" /> Last sign-in</div>
-                <p className="font-medium text-slate-900">{authInfo?.last_sign_in_at ? new Date(authInfo.last_sign_in_at).toLocaleString() : "Never"}</p>
+                <p className="font-medium text-slate-900">{authInfo?.last_sign_in_at ? formatDateTime(authInfo.last_sign_in_at) : "Never"}</p>
               </div>
               <div className="bg-slate-50 rounded-lg p-3 sm:col-span-2">
                 <div className="flex items-center gap-1.5 text-xs text-slate-500 mb-1">Email confirmed</div>
-                <p className="font-medium text-slate-900">{authInfo?.email_confirmed_at ? `Yes — ${new Date(authInfo.email_confirmed_at).toLocaleDateString()}` : "Pending"}</p>
+                <p className="font-medium text-slate-900">{authInfo?.email_confirmed_at ? `Yes — ${formatDate(authInfo.email_confirmed_at)}` : "Pending"}</p>
               </div>
             </div>
 

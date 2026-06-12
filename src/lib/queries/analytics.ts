@@ -10,6 +10,10 @@ export interface DashboardStats {
   campaignPerf: { name: string; openRate: number; replyRate: number }[];
   recentActivities: { id: string; lead: string; action: string; type: string; time: string }[];
   hotLeadAlerts: { name: string; company: string; score: number }[];
+  /** Real month-over-month % change in new-lead count (undefined when no prior data) */
+  leadsDelta?: number;
+  /** Real workspace totals for the snapshot card */
+  snapshot: { emailsSent: number; repliesReceived: number; hotLeads: number; aiScored: number };
 }
 
 const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
@@ -17,13 +21,15 @@ const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "
 export async function getDashboardStats(): Promise<DashboardStats> {
   const supabase = await createClient();
 
-  const [{ data: leads }, { data: campaigns }, { data: activities }] = await Promise.all([
+  const [{ data: leads }, { data: campaigns }, { data: activities }, { data: allCampaigns }, { count: replyCount }] = await Promise.all([
     supabase.from("leads").select("id, full_name, company_name, lead_score, status, created_at"),
     supabase.from("campaigns").select("campaign_name, sent_count, open_rate, reply_rate").order("sent_count", { ascending: false }).limit(5),
     supabase.from("lead_activities")
       .select("id, activity_type, created_at, leads(full_name, company_name)")
       .order("created_at", { ascending: false })
       .limit(8),
+    supabase.from("campaigns").select("sent_count"),
+    supabase.from("inbox_messages").select("id", { count: "exact", head: true }).eq("direction", "inbound"),
   ]);
 
   const totalLeads = leads?.length || 0;
@@ -54,6 +60,23 @@ export async function getDashboardStats(): Promise<DashboardStats> {
       hot: monthLeads.filter((l) => l.status === "Hot").length,
     });
   }
+
+  // Real month-over-month delta on new-lead count (only when prior month had leads)
+  const thisMonthLeads = months[months.length - 1]?.leads ?? 0;
+  const lastMonthLeads = months[months.length - 2]?.leads ?? 0;
+  const leadsDelta = lastMonthLeads > 0
+    ? Math.round(((thisMonthLeads - lastMonthLeads) / lastMonthLeads) * 1000) / 10
+    : undefined;
+
+  // Real workspace snapshot totals
+  const emailsSent = (allCampaigns || []).reduce((s, c) => s + (c.sent_count || 0), 0);
+  const aiScored = (leads || []).filter((l) => (l.lead_score || 0) > 0).length;
+  const snapshot = {
+    emailsSent,
+    repliesReceived: replyCount || 0,
+    hotLeads,
+    aiScored,
+  };
 
   const campaignPerf = (campaigns || []).map((c) => ({
     name: c.campaign_name.length > 14 ? c.campaign_name.slice(0, 12) + "…" : c.campaign_name,
@@ -89,6 +112,8 @@ export async function getDashboardStats(): Promise<DashboardStats> {
     campaignPerf,
     recentActivities,
     hotLeadAlerts,
+    leadsDelta,
+    snapshot,
   };
 }
 
@@ -175,7 +200,9 @@ async function computeAnalytics(startISO: string | null, endISO: string | null):
   const emailsSent = allCampaigns.reduce((s, c) => s + (c.sent_count || 0), 0);
   const avgOpen = sentCampaigns.length ? sentCampaigns.reduce((s, c) => s + Number(c.open_rate || 0), 0) / sentCampaigns.length : 0;
   const avgReply = sentCampaigns.length ? sentCampaigns.reduce((s, c) => s + Number(c.reply_rate || 0), 0) / sentCampaigns.length : 0;
-  const avgClick = avgOpen * 0.25; // approximation
+  // Real click rate from tracked activities (clicks per sent email)
+  const totalClicks = (activities || []).filter((a) => a.activity_type === "EMAIL_CLICKED").length;
+  const avgClick = emailsSent > 0 ? (totalClicks / emailsSent) * 100 : 0;
 
   // Funnel: New / Warm / Hot / Qualified / Converted
   const funnel = ["New", "Warm", "Hot", "Scored", "Converted"].map((stage) => {

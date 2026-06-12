@@ -7,7 +7,9 @@ import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { PageHeader } from "@/components/ui/page-header";
+import { useFeedback } from "@/components/ui/feedback";
 import { deleteNewsletter, duplicateNewsletter, type NewsletterRow } from "@/lib/queries/newsletters";
+import { formatDate } from "@/lib/utils";
 
 const statusVariant: Record<string, "default" | "blue" | "warning" | "success" | "danger"> = {
   Draft: "default",
@@ -23,6 +25,7 @@ interface Props {
 }
 
 export function NewslettersView({ newsletters, stats }: Props) {
+  const { confirm } = useFeedback();
   const [search, setSearch] = useState("");
   const [pending, start] = useTransition();
   const [menuOpen, setMenuOpen] = useState<string | null>(null);
@@ -31,8 +34,8 @@ export function NewslettersView({ newsletters, stats }: Props) {
     (n) => !search || n.title.toLowerCase().includes(search.toLowerCase()) || (n.subject || "").toLowerCase().includes(search.toLowerCase())
   );
 
-  function handleDelete(id: string) {
-    if (!confirm("Delete this newsletter?")) return;
+  async function handleDelete(id: string) {
+    if (!(await confirm({ title: "Delete newsletter?", message: "Delete this newsletter?", confirmLabel: "Delete", danger: true }))) return;
     start(async () => { await deleteNewsletter(id); });
     setMenuOpen(null);
   }
@@ -133,7 +136,7 @@ export function NewslettersView({ newsletters, stats }: Props) {
                       <td className="px-4 py-3">
                         {n.sent_count > 0 ? <span className="text-amber-700 font-medium">{clickRate}%</span> : "—"}
                       </td>
-                      <td className="px-4 py-3 text-slate-500">{n.sent_at ? new Date(n.sent_at).toLocaleDateString() : "—"}</td>
+                      <td className="px-4 py-3 text-slate-500">{n.sent_at ? formatDate(n.sent_at) : "—"}</td>
                       <td className="px-4 py-3 relative">
                         <button
                           onClick={() => setMenuOpen(menuOpen === n.id ? null : n.id)}

@@ -35,7 +35,7 @@ export function KpiCard({ label, value, delta, icon, accent = "blue" }: KpiCardP
           </div>
         )}
       </div>
-      <p className="text-xs text-slate-400 mt-1">vs. last month</p>
+      {delta !== undefined && <p className="text-xs text-slate-400 mt-1">vs. last month</p>}
     </div>
   );
 }

@@ -1,6 +1,6 @@
 "use client";
 import { useState, useTransition } from "react";
-import { Calendar, Download, ArrowUp, ArrowDown, Mail, Mouse, MessageCircle } from "lucide-react";
+import { Calendar, Download, Mail, Mouse, MessageCircle } from "lucide-react";
 import { Area, AreaChart, Bar, BarChart, CartesianGrid, Legend, Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -127,10 +127,10 @@ export function AnalyticsView({ stats: initialStats }: { stats: Stats }) {
       {/* KPI strip */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
         {[
-          { label: "Emails sent", value: stats.emailsSent.toLocaleString(), delta: 12.4, icon: <Mail className="h-4 w-4" />, color: "bg-blue-50 text-blue-600" },
-          { label: "Open rate", value: `${stats.openRate}%`, delta: 5.1, icon: <Mail className="h-4 w-4" />, color: "bg-emerald-50 text-emerald-600" },
-          { label: "Click rate", value: `${stats.clickRate}%`, delta: 2.4, icon: <Mouse className="h-4 w-4" />, color: "bg-purple-50 text-purple-600" },
-          { label: "Reply rate", value: `${stats.replyRate}%`, delta: -1.2, icon: <MessageCircle className="h-4 w-4" />, color: "bg-amber-50 text-amber-600" },
+          { label: "Emails sent", value: stats.emailsSent.toLocaleString(), icon: <Mail className="h-4 w-4" />, color: "bg-blue-50 text-blue-600" },
+          { label: "Open rate", value: `${stats.openRate}%`, icon: <Mail className="h-4 w-4" />, color: "bg-emerald-50 text-emerald-600" },
+          { label: "Click rate", value: `${stats.clickRate}%`, icon: <Mouse className="h-4 w-4" />, color: "bg-purple-50 text-purple-600" },
+          { label: "Reply rate", value: `${stats.replyRate}%`, icon: <MessageCircle className="h-4 w-4" />, color: "bg-amber-50 text-amber-600" },
         ].map((s) => (
           <Card key={s.label} className="p-5">
             <div className="flex items-center justify-between mb-3">
@@ -138,10 +138,6 @@ export function AnalyticsView({ stats: initialStats }: { stats: Stats }) {
               <div className={`h-8 w-8 rounded-lg flex items-center justify-center ${s.color}`}>{s.icon}</div>
             </div>
             <p className="text-2xl font-bold text-slate-900">{s.value}</p>
-            <div className={`flex items-center gap-0.5 text-xs font-semibold mt-1 ${s.delta >= 0 ? "text-emerald-600" : "text-red-600"}`}>
-              {s.delta >= 0 ? <ArrowUp className="h-3 w-3" /> : <ArrowDown className="h-3 w-3" />}
-              {Math.abs(s.delta)}% vs last period
-            </div>
           </Card>
         ))}
       </div>

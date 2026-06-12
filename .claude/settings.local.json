@@ -13,7 +13,10 @@
       "Bash(rm -rf bp)",
       "Bash(mkdir bp *)",
       "Bash(unzip -o -q \"/Users/apple/Downloads/Ai Lead Nurture Platform Product Blueprint.docx\" -d bp)",
-      "Bash(python3 -c ' *)"
+      "Bash(python3 -c ' *)",
+      "Read(//Users/apple/Desktop/hundo/**)",
+      "Bash(flutter analyze *)",
+      "Bash(flutter test *)"
     ]
   }
 }

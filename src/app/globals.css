@@ -232,3 +232,9 @@ html, body {
 .dark .landing-page .text-slate-400 { color: #94a3b8 !important; }
 .dark .landing-page .border-slate-100 { border-color: #f1f5f9 !important; }
 .dark .landing-page .border-slate-200 { border-color: #e2e8f0 !important; }
+
+/* In-app toast/dialog entrance animation */
+@keyframes lp-toast-in {
+  from { opacity: 0; transform: translateY(-8px) scale(0.98); }
+  to   { opacity: 1; transform: translateY(0) scale(1); }
+}

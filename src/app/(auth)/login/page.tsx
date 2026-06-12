@@ -13,7 +13,29 @@ function LoginForm() {
   const [showPass, setShowPass] = useState(false);
   const [form, setForm] = useState({ email: "", password: "" });
   const [error, setError] = useState<string | null>(null);
+  const [notice, setNotice] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+  const [resetting, setResetting] = useState(false);
+
+  async function handleForgotPassword() {
+    setError(null);
+    setNotice(null);
+    if (!form.email.includes("@")) {
+      setError("Enter your email address above first, then click “Forgot password?”");
+      return;
+    }
+    setResetting(true);
+    const supabase = createClient();
+    const { error: resetError } = await supabase.auth.resetPasswordForEmail(form.email, {
+      redirectTo: `${window.location.origin}/auth/callback?next=/settings`,
+    });
+    setResetting(false);
+    if (resetError) {
+      setError(resetError.message);
+      return;
+    }
+    setNotice(`If an account exists for ${form.email}, a password-reset link is on its way. Open it to set a new password.`);
+  }
 
   useEffect(() => {
     const e = params.get("error");
@@ -61,6 +83,12 @@ function LoginForm() {
             <span>{error}</span>
           </div>
         )}
+        {notice && (
+          <div className="flex items-start gap-2 bg-emerald-50 border border-emerald-200 rounded-lg p-3 text-sm text-emerald-700">
+            <Mail className="h-4 w-4 mt-0.5 flex-shrink-0" />
+            <span>{notice}</span>
+          </div>
+        )}
 
         <div>
           <label className="block text-sm font-medium text-slate-700 mb-1.5">Email address</label>
@@ -76,9 +104,14 @@ function LoginForm() {
         <div>
           <div className="flex items-center justify-between mb-1.5">
             <label className="text-sm font-medium text-slate-700">Password</label>
-            <Link href="#" className="text-xs text-blue-600 hover:underline">
-              Forgot password?
-            </Link>
+            <button
+              type="button"
+              onClick={handleForgotPassword}
+              disabled={resetting}
+              className="text-xs text-blue-600 hover:underline disabled:opacity-50"
+            >
+              {resetting ? "Sending…" : "Forgot password?"}
+            </button>
           </div>
           <Input
             type={showPass ? "text" : "password"}

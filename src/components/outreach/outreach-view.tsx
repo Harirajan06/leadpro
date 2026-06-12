@@ -14,6 +14,7 @@ import { Card } from "@/components/ui/card";
 import { Tabs } from "@/components/ui/tabs";
 import { Modal } from "@/components/ui/modal";
 import { PageHeader } from "@/components/ui/page-header";
+import { useFeedback } from "@/components/ui/feedback";
 import {
   setSequenceStatus, deleteSequence, duplicateSequence, getSequenceActivityFeed,
   type OutreachSequenceRow, type OutreachActivityFeedRow,
@@ -24,6 +25,7 @@ import {
 } from "@/lib/queries/outreach-accounts";
 import { enrollLeads, runOutreachProcessorNow, type EnrollResult } from "@/lib/outreach/actions";
 import type { LeadRow } from "@/lib/queries/leads";
+import { formatDate, formatDateTime } from "@/lib/utils";
 
 const statusVariant: Record<string, "success" | "warning" | "default" | "blue"> = {
   Active: "success",
@@ -50,6 +52,7 @@ export function OutreachView({ sequences, stats, leads, accounts, unipileReady }
   accounts: OutreachAccountRow[];
   unipileReady: boolean;
 }) {
+  const { toast, confirm } = useFeedback();
   const searchParams = useSearchParams();
   const connectedParam = searchParams.get("connected");
   const [tab, setTab] = useState(connectedParam === "linkedin" ? "linkedin" : connectedParam === "email" ? "email" : "sequences");
@@ -96,8 +99,8 @@ export function OutreachView({ sequences, stats, leads, accounts, unipileReady }
   function toggleStatus(s: OutreachSequenceRow) {
     start(async () => { await setSequenceStatus(s.id, s.status === "Active" ? "Paused" : "Active"); });
   }
-  function handleDelete(id: string) {
-    if (!confirm("Delete this sequence? Enrolled leads and activity will be removed.")) return;
+  async function handleDelete(id: string) {
+    if (!(await confirm({ title: "Delete sequence?", message: "Delete this sequence? Enrolled leads and activity will be removed.", confirmLabel: "Delete", danger: true }))) return;
     start(async () => { await deleteSequence(id); });
   }
   function handleDuplicate(id: string) {
@@ -108,7 +111,7 @@ export function OutreachView({ sequences, stats, leads, accounts, unipileReady }
     start(async () => {
       const r = await runOutreachProcessorNow();
       router.refresh();
-      alert(`Scheduler ran: ${r.sent} sent, ${r.failed} failed, ${r.skipped} skipped (${r.processed} due jobs processed).`);
+      toast(`Scheduler ran: ${r.sent} sent, ${r.failed} failed, ${r.skipped} skipped (${r.processed} due jobs processed).`, "success");
     });
   }
 
@@ -184,7 +187,7 @@ export function OutreachView({ sequences, stats, leads, accounts, unipileReady }
                     <td className="px-4 py-3">
                       <Link href={`/outreach/builder?id=${s.id}`} className="block group">
                         <p className="font-medium text-slate-900 group-hover:text-blue-600">{s.name}</p>
-                        <p className="text-xs text-slate-500 mt-0.5">Modified {new Date(s.updated_at).toLocaleDateString()}</p>
+                        <p className="text-xs text-slate-500 mt-0.5">Modified {formatDate(s.updated_at)}</p>
                       </Link>
                     </td>
                     <td className="px-4 py-3"><ChannelBadges channel={s.channel} /></td>
@@ -400,7 +403,7 @@ function ActivityModal({ sequence, onClose }: { sequence: OutreachSequenceRow; o
                 </div>
                 <div className="text-right flex-shrink-0">
                   <Badge variant={ACTIVITY_STATUS[a.status] || "default"}>{a.status}</Badge>
-                  <p className="text-[11px] text-slate-400 mt-0.5">{new Date(a.created_at).toLocaleString()}</p>
+                  <p className="text-[11px] text-slate-400 mt-0.5">{formatDateTime(a.created_at)}</p>
                 </div>
               </div>
             ))}
@@ -419,6 +422,7 @@ function AccountsTab({ channel, accounts, unipileReady }: {
   accounts: OutreachAccountRow[];
   unipileReady: boolean;
 }) {
+  const { confirm } = useFeedback();
   const [pending, start] = useTransition();
   const [error, setError] = useState<string | null>(null);
   const isLinkedIn = channel === "linkedin";
@@ -435,8 +439,8 @@ function AccountsTab({ channel, accounts, unipileReady }: {
     setError(null);
     start(async () => { const r = await syncOutreachAccounts(); if (!r.ok) setError(r.error || "Sync failed"); });
   }
-  function handleRemove(id: string) {
-    if (!confirm("Disconnect this account?")) return;
+  async function handleRemove(id: string) {
+    if (!(await confirm({ title: "Disconnect account?", message: "Disconnect this account?", confirmLabel: "Disconnect", danger: true }))) return;
     start(async () => { await deleteOutreachAccount(id); });
   }
 

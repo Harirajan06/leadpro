@@ -44,10 +44,10 @@ export function DashboardView({ stats }: { stats: DashboardStats }) {
 
       {/* KPI cards */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-        <KpiCard label="Total Leads" value={stats.totalLeads.toLocaleString()} delta={12.4} icon={<Users2 className="h-4.5 w-4.5" />} accent="blue" />
-        <KpiCard label="Hot Leads" value={stats.hotLeads} delta={8.2} icon={<Flame className="h-4.5 w-4.5" />} accent="amber" />
-        <KpiCard label="Avg. Open Rate" value={`${stats.avgOpenRate}%`} delta={5.1} icon={<MailOpen className="h-4.5 w-4.5" />} accent="emerald" />
-        <KpiCard label="Conversion Rate" value={`${stats.conversionRate}%`} delta={-1.2} icon={<Target className="h-4.5 w-4.5" />} accent="purple" />
+        <KpiCard label="Total Leads" value={stats.totalLeads.toLocaleString()} delta={stats.leadsDelta} icon={<Users2 className="h-4.5 w-4.5" />} accent="blue" />
+        <KpiCard label="Hot Leads" value={stats.hotLeads} icon={<Flame className="h-4.5 w-4.5" />} accent="amber" />
+        <KpiCard label="Avg. Open Rate" value={`${stats.avgOpenRate}%`} icon={<MailOpen className="h-4.5 w-4.5" />} accent="emerald" />
+        <KpiCard label="Conversion Rate" value={`${stats.conversionRate}%`} icon={<Target className="h-4.5 w-4.5" />} accent="purple" />
       </div>
 
       {/* Charts row */}
@@ -148,14 +148,14 @@ export function DashboardView({ stats }: { stats: DashboardStats }) {
         <div className="space-y-4">
           <Card>
             <CardHeader>
-              <CardTitle>Today&apos;s Snapshot</CardTitle>
+              <CardTitle>Workspace Snapshot</CardTitle>
             </CardHeader>
             <CardContent className="space-y-4">
               {[
-                { label: "Emails sent", value: "1,284", icon: <Reply className="h-4 w-4" />, color: "text-blue-600 bg-blue-50" },
-                { label: "Replies received", value: 42, icon: <Reply className="h-4 w-4" />, color: "text-emerald-600 bg-emerald-50" },
-                { label: "Meetings booked", value: 7, icon: <Calendar className="h-4 w-4" />, color: "text-amber-600 bg-amber-50" },
-                { label: "AI scores generated", value: 158, icon: <Target className="h-4 w-4" />, color: "text-purple-600 bg-purple-50" },
+                { label: "Emails sent", value: stats.snapshot.emailsSent.toLocaleString(), icon: <MailOpen className="h-4 w-4" />, color: "text-blue-600 bg-blue-50" },
+                { label: "Replies received", value: stats.snapshot.repliesReceived.toLocaleString(), icon: <Reply className="h-4 w-4" />, color: "text-emerald-600 bg-emerald-50" },
+                { label: "Hot leads", value: stats.snapshot.hotLeads.toLocaleString(), icon: <Flame className="h-4 w-4" />, color: "text-amber-600 bg-amber-50" },
+                { label: "AI scored", value: stats.snapshot.aiScored.toLocaleString(), icon: <Target className="h-4 w-4" />, color: "text-purple-600 bg-purple-50" },
               ].map((row) => (
                 <div key={row.label} className="flex items-center justify-between">
                   <div className="flex items-center gap-3">

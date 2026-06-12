@@ -1,4 +1,4 @@
-import { LayoutDashboard, Users2, Send, Layers3, Workflow, FileText, BarChart3, Inbox, Newspaper, UserCog, Settings, Link2, Rocket } from "lucide-react";
+import { LayoutDashboard, Users2, Send, Layers3, Workflow, FileText, BarChart3, Inbox, Newspaper, UserCog, Settings, Link2 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 
 export type Role = "Super Admin" | "Sales Admin" | "Marketing Admin" | string;
@@ -16,16 +16,21 @@ const SALES: Role[] = ["Super Admin", "Sales Admin"];
 const MARKETING: Role[] = ["Super Admin", "Marketing Admin"];
 const SUPER: Role[] = ["Super Admin"];
 
+/**
+ * Ordered by day-to-day priority (the Instantly/Apollo daily loop):
+ * Dashboard → Leads → Campaigns (now includes Sequences/Outreach) → Inbox,
+ * then supporting tools (Segments, Newsletters, Templates, Workflows),
+ * measurement last (Analytics). The old Outreach tab is merged into Campaigns.
+ */
 export const navMainItems: NavItem[] = [
   { label: "Dashboard", href: "/dashboard", icon: LayoutDashboard, roles: ALL },
   { label: "Leads", href: "/leads", icon: Users2, roles: SALES },
-  { label: "Segments", href: "/segments", icon: Layers3, roles: MARKETING },
   { label: "Campaigns", href: "/campaigns", icon: Send, roles: SALES },
-  { label: "Outreach", href: "/outreach", icon: Rocket, roles: SALES },
-  { label: "Newsletters", href: "/newsletters", icon: Newspaper, roles: MARKETING },
-  { label: "Workflows", href: "/workflows", icon: Workflow, roles: ALL },
   { label: "Inbox", href: "/inbox", icon: Inbox, roles: SALES },
+  { label: "Segments", href: "/segments", icon: Layers3, roles: MARKETING },
+  { label: "Newsletters", href: "/newsletters", icon: Newspaper, roles: MARKETING },
   { label: "Templates", href: "/templates", icon: FileText, roles: ALL },
+  { label: "Workflows", href: "/workflows", icon: Workflow, roles: ALL },
   { label: "Analytics", href: "/analytics", icon: BarChart3, roles: ALL },
 ];
 

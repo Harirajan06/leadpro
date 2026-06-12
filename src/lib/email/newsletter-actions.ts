@@ -172,9 +172,9 @@ export async function sendNewsletter(newsletterId: string): Promise<SendResult> 
     status: failed === leads.length ? "Failed" : "Sent",
     sent_at: new Date().toISOString(),
     sent_count: sent,
-    // For demo realism: estimate opens at ~50% in sandbox (we won't have real tracking pixels here)
-    open_count: Math.floor(sent * 0.5),
-    click_count: Math.floor(sent * 0.18),
+    // No tracking pixels yet — report honest zeros instead of invented numbers.
+    open_count: 0,
+    click_count: 0,
   }).eq("id", n.id);
 
   revalidatePath("/newsletters");

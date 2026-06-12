@@ -84,8 +84,24 @@ export async function markUnread(id: string) {
   revalidatePath("/inbox");
 }
 
-export async function sendReply(leadId: string, subject: string, body: string) {
+export async function sendReply(
+  leadId: string,
+  subject: string,
+  body: string
+): Promise<{ ok: boolean; error?: string; simulated?: boolean }> {
   const supabase = await createClient();
+
+  // Actually deliver the reply via the email service (Brevo/Resend/dev-sim) —
+  // previously this only logged a row without sending anything.
+  const { data: lead } = await supabase.from("leads").select("email").eq("id", leadId).single();
+  let simulated = false;
+  if (lead?.email) {
+    const { sendEmail } = await import("@/lib/email/resend");
+    const result = await sendEmail({ to: lead.email, subject, text: body });
+    if (!result.ok) return { ok: false, error: result.error };
+    simulated = result.simulated ?? false;
+  }
+
   await supabase.from("inbox_messages").insert({
     lead_id: leadId,
     direction: "outbound",
@@ -94,4 +110,5 @@ export async function sendReply(leadId: string, subject: string, body: string) {
     is_read: true,
   });
   revalidatePath("/inbox");
+  return { ok: true, simulated };
 }

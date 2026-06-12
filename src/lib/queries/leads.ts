@@ -85,26 +85,59 @@ export async function bulkDeleteLeads(ids: string[]) {
 }
 
 export async function bulkInsertLeads(
-  leads: Array<Partial<LeadRow>>
-): Promise<{ inserted: number; error?: string }> {
-  if (!leads.length) return { inserted: 0 };
+  leads: Array<Partial<LeadRow>>,
+  opts?: { defaultSource?: string }
+): Promise<{ inserted: number; duplicates: number; error?: string }> {
+  if (!leads.length) return { inserted: 0, duplicates: 0 };
   const supabase = await createClient();
-  const rows = leads.map((l) => ({
-    full_name: l.full_name ?? null,
-    email: l.email ?? null,
-    phone: l.phone ?? null,
-    company_name: l.company_name ?? null,
-    industry: l.industry ?? null,
-    interest_area: l.interest_area ?? null,
-    linkedin: l.linkedin ?? null,
-    website_url: l.website_url ?? null,
-    source: "CSV Upload",
-    status: "New",
-  }));
+
+  // Build a set of existing identifiers (email + linkedin) to skip duplicates.
+  const { data: existingRows } = await supabase
+    .from("leads")
+    .select("email, linkedin");
+  const norm = (s: string | null | undefined) => (s || "").toLowerCase().trim();
+  const existing = new Set<string>();
+  for (const r of existingRows || []) {
+    if (r.email) existing.add("e:" + norm(r.email));
+    if (r.linkedin) existing.add("l:" + norm(r.linkedin));
+  }
+
+  const seen = new Set<string>();
+  let duplicates = 0;
+  const rows: Array<Record<string, unknown>> = [];
+  for (const l of leads) {
+    const eKey = l.email ? "e:" + norm(l.email) : null;
+    const lKey = l.linkedin ? "l:" + norm(l.linkedin) : null;
+    const isDup =
+      (eKey && (existing.has(eKey) || seen.has(eKey))) ||
+      (lKey && (existing.has(lKey) || seen.has(lKey)));
+    if (isDup) {
+      duplicates++;
+      continue;
+    }
+    if (eKey) seen.add(eKey);
+    if (lKey) seen.add(lKey);
+    rows.push({
+      full_name: l.full_name ?? null,
+      email: l.email ?? null,
+      phone: l.phone ?? null,
+      company_name: l.company_name ?? null,
+      industry: l.industry ?? null,
+      interest_area: l.interest_area ?? null,
+      linkedin: l.linkedin ?? null,
+      website_url: l.website_url ?? null,
+      message: l.message ?? null,
+      source: l.source ?? opts?.defaultSource ?? "Import",
+      status: l.status ?? "New",
+    });
+  }
+
+  if (!rows.length) return { inserted: 0, duplicates };
+
   const { data, error } = await supabase.from("leads").insert(rows).select("id");
   if (error) {
     console.error("bulkInsertLeads error:", error);
-    return { inserted: 0, error: error.message };
+    return { inserted: 0, duplicates, error: error.message };
   }
   revalidatePath("/leads");
   const inserted = data?.length ?? 0;
@@ -112,9 +145,9 @@ export async function bulkInsertLeads(
     await notifyCurrentUser({
       type: "leads",
       title: `${inserted} lead${inserted === 1 ? "" : "s"} imported`,
-      message: "Via CSV upload",
+      message: opts?.defaultSource ? `Via ${opts.defaultSource}` : "Via import",
       link: "/leads",
     });
   }
-  return { inserted };
+  return { inserted, duplicates };
 }

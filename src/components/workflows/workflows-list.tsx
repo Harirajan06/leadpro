@@ -8,6 +8,7 @@ import { Badge } from "@/components/ui/badge";
 import { Card } from "@/components/ui/card";
 import { PageHeader } from "@/components/ui/page-header";
 import type { WorkflowRow } from "@/lib/queries/workflows";
+import { formatDate } from "@/lib/utils";
 
 const folderIcons: Record<string, React.ReactNode> = {
   "Lead Generation": <Megaphone className="h-4 w-4" />,
@@ -114,7 +115,7 @@ export function WorkflowsList({ workflows }: { workflows: (WorkflowRow & { execu
                       </div>
                       <div>
                         <p className="text-xs text-slate-400">Updated</p>
-                        <p className="text-xs font-medium text-slate-700">{new Date(w.updated_at).toLocaleDateString()}</p>
+                        <p className="text-xs font-medium text-slate-700">{formatDate(w.updated_at)}</p>
                       </div>
                     </div>
                   </Card>

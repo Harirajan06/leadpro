@@ -8,14 +8,17 @@ import { createClient } from "@/lib/supabase/client";
 import { CreateMenu } from "./create-menu";
 import { NotificationsBell } from "./notifications-bell";
 import { useSidebar } from "./sidebar-context";
+import { LogoMark } from "@/components/brand/logo";
 
 interface TopbarProps {
   userName?: string;
   userEmail?: string;
   userRole?: string;
+  onToggleAssistant?: () => void;
+  assistantOpen?: boolean;
 }
 
-export function Topbar({ userName = "Guest", userEmail = "", userRole = "User" }: TopbarProps) {
+export function Topbar({ userName = "Guest", userEmail = "", userRole = "User", onToggleAssistant, assistantOpen = false }: TopbarProps) {
   const router = useRouter();
   const { toggleMobile } = useSidebar();
   const [open, setOpen] = useState(false);
@@ -91,7 +94,7 @@ export function Topbar({ userName = "Guest", userEmail = "", userRole = "User" }
           </button>
 
           {open && (
-            <div className="absolute right-0 top-full mt-1 w-60 bg-white rounded-xl border border-slate-200 shadow-lg overflow-hidden">
+            <div className="absolute right-0 top-full mt-1 w-60 bg-white rounded-xl border border-slate-200 shadow-lg overflow-hidden z-40">
               <div className="p-3 border-b border-slate-100">
                 <p className="text-sm font-semibold text-slate-900">{userName}</p>
                 <p className="text-xs text-slate-500 truncate">{userEmail}</p>
@@ -123,6 +126,18 @@ export function Topbar({ userName = "Guest", userEmail = "", userRole = "User" }
             </div>
           )}
         </div>
+
+        {/* AI assistant launcher — trails the username */}
+        <button
+          onClick={onToggleAssistant}
+          aria-label={assistantOpen ? "Close AI assistant" : "Open AI assistant"}
+          title="LeadPro AI"
+          className={`ml-1 h-9 w-9 rounded-full flex items-center justify-center transition-all flex-shrink-0 bg-gradient-to-br from-blue-600 via-blue-500 to-indigo-600 text-white shadow-sm shadow-blue-500/30 ${
+            assistantOpen ? "ring-2 ring-blue-300 shadow-md" : "hover:shadow-md hover:scale-105 active:scale-95"
+          }`}
+        >
+          <LogoMark className="h-5 w-5" />
+        </button>
       </div>
     </header>
   );

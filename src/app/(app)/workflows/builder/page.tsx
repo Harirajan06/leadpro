@@ -299,6 +299,13 @@ function WorkflowBuilderInner() {
             </Button>
           </div>
           {testResult ? (
+            <>
+            {testResult.simulated && (
+              <div className="mx-4 mt-4 flex items-start gap-2 bg-amber-50 border border-amber-200 rounded-lg p-3 text-xs text-amber-800">
+                <span className="font-semibold flex-shrink-0">Simulated dry-run:</span>
+                <span>no emails were sent, no scores were changed. This previews the step order only — live triggers are not active yet.</span>
+              </div>
+            )}
             <ul className="divide-y divide-slate-100">
               {testResult.steps.map((s, i) => (
                 <li key={i} className="p-4 flex items-center gap-3">
@@ -323,6 +330,7 @@ function WorkflowBuilderInner() {
                 </li>
               ))}
             </ul>
+            </>
           ) : (
             <div className="p-12 text-center text-slate-500 text-sm">
               Click <strong>Test automation</strong> to simulate a run.

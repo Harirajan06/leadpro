@@ -24,7 +24,9 @@ import { Badge } from "@/components/ui/badge";
 import { Card } from "@/components/ui/card";
 import { Modal } from "@/components/ui/modal";
 import { PageHeader } from "@/components/ui/page-header";
+import { useFeedback } from "@/components/ui/feedback";
 import { deleteSegment, exportSegmentCsv, type SegmentRow } from "@/lib/queries/segments";
+import { formatDate } from "@/lib/utils";
 
 const typeColor: Record<string, "blue" | "purple" | "pink"> = {
   Dynamic: "blue",
@@ -55,6 +57,7 @@ function downloadCsv(filename: string, csv: string) {
 
 export function SegmentsList({ segments }: { segments: (SegmentRow & { contacts: number })[] }) {
   const router = useRouter();
+  const { toast, confirm } = useFeedback();
   const [pending, start] = useTransition();
   const [selected, setSelected] = useState<string[]>([]);
   const [menuOpenId, setMenuOpenId] = useState<string | null>(null);
@@ -72,7 +75,7 @@ export function SegmentsList({ segments }: { segments: (SegmentRow & { contacts:
   }
 
   async function handleDelete(id: string) {
-    if (!confirm("Delete this segment?")) return;
+    if (!(await confirm({ title: "Delete segment?", message: "Delete this segment?", confirmLabel: "Delete", danger: true }))) return;
     start(async () => {
       await deleteSegment(id);
       setSelected((prev) => prev.filter((x) => x !== id));
@@ -102,15 +105,15 @@ export function SegmentsList({ segments }: { segments: (SegmentRow & { contacts:
   }
 
   function handleSyncCrm() {
-    window.alert("CRM sync coming soon — connect HubSpot in Settings -> API Keys");
+    toast("CRM sync coming soon — connect HubSpot in Settings -> API Keys", "info");
   }
 
   function handleAiRecommend() {
-    window.alert("AI is analyzing segments... (full AI integration in v2)");
+    toast("AI is analyzing segments... (full AI integration in v2)", "info");
   }
 
   function saveAssign() {
-    window.alert(`Assigned ${selected.length} segment(s) to ${assignRep}`);
+    toast(`Assigned ${selected.length} segment(s) to ${assignRep}`, "success");
     setAssignOpen(false);
   }
 
@@ -120,7 +123,7 @@ export function SegmentsList({ segments }: { segments: (SegmentRow & { contacts:
       setTagsOpen(false);
       return;
     }
-    window.alert(`Added tag "${tag}" to ${selected.length} segment(s)`);
+    toast(`Added tag "${tag}" to ${selected.length} segment(s)`, "success");
     setTagInput("");
     setTagsOpen(false);
   }
@@ -226,7 +229,7 @@ export function SegmentsList({ segments }: { segments: (SegmentRow & { contacts:
                   </td>
                   <td className="px-4 py-3"><Badge variant={typeColor[s.segment_type] || "default"}>{s.segment_type}</Badge></td>
                   <td className="px-4 py-3"><Badge variant={statusColor[s.status] || "default"}>{s.status}</Badge></td>
-                  <td className="px-4 py-3 text-slate-500">{new Date(s.created_at).toLocaleDateString()}</td>
+                  <td className="px-4 py-3 text-slate-500">{formatDate(s.created_at)}</td>
                   <td className="px-4 py-3">
                     <div className="flex items-center gap-1 justify-end relative">
                       <button onClick={() => handleDelete(s.id)} disabled={pending} className="p-1.5 rounded-md hover:bg-red-50 text-red-500 disabled:opacity-50">
@@ -251,7 +254,7 @@ export function SegmentsList({ segments }: { segments: (SegmentRow & { contacts:
                             </Link>
                             <button
                               onClick={() => {
-                                window.alert(`Duplicated "${s.segment_name}" (cosmetic)`);
+                                toast(`Duplicated "${s.segment_name}" (cosmetic)`, "info");
                                 setMenuOpenId(null);
                               }}
                               className="w-full flex items-center gap-2 px-3 py-2 text-sm text-slate-700 hover:bg-slate-50"
@@ -260,7 +263,7 @@ export function SegmentsList({ segments }: { segments: (SegmentRow & { contacts:
                             </button>
                             <button
                               onClick={() => {
-                                window.alert(s.status === "Paused" ? "Resumed (cosmetic)" : "Paused (cosmetic)");
+                                toast(s.status === "Paused" ? "Resumed (cosmetic)" : "Paused (cosmetic)", "info");
                                 setMenuOpenId(null);
                               }}
                               className="w-full flex items-center gap-2 px-3 py-2 text-sm text-slate-700 hover:bg-slate-50"

@@ -306,9 +306,9 @@ export function LandingPage() {
                 AI-powered lead nurturing & customer engagement for modern B2B teams.
               </p>
               <div className="mt-4 flex items-center gap-2">
-                <a href="#" className="p-2 rounded-lg hover:bg-slate-200 text-slate-600" title="X / Twitter"><AtSign className="h-4 w-4" /></a>
-                <a href="#" className="p-2 rounded-lg hover:bg-slate-200 text-slate-600" title="LinkedIn"><Globe className="h-4 w-4" /></a>
-                <a href="#" className="p-2 rounded-lg hover:bg-slate-200 text-slate-600" title="GitHub"><Code2 className="h-4 w-4" /></a>
+                <a href="mailto:harirajanncse@gmail.com" className="p-2 rounded-lg hover:bg-slate-200 text-slate-600" title="Email us"><AtSign className="h-4 w-4" /></a>
+                <a href="https://www.linkedin.com" target="_blank" rel="noopener noreferrer" className="p-2 rounded-lg hover:bg-slate-200 text-slate-600" title="LinkedIn"><Globe className="h-4 w-4" /></a>
+                <a href="https://github.com/Harirajan06/leadpro" target="_blank" rel="noopener noreferrer" className="p-2 rounded-lg hover:bg-slate-200 text-slate-600" title="GitHub"><Code2 className="h-4 w-4" /></a>
               </div>
             </div>
             <div>
@@ -323,8 +323,8 @@ export function LandingPage() {
               <p className="text-xs font-semibold text-slate-900 uppercase tracking-wider mb-3">Company</p>
               <ul className="space-y-2 text-sm text-slate-600">
                 <li><Link href="/help" className="hover:text-slate-900">Help center</Link></li>
-                <li><Link href="#" className="hover:text-slate-900">Privacy</Link></li>
-                <li><Link href="#" className="hover:text-slate-900">Terms</Link></li>
+                <li><Link href="/privacy" className="hover:text-slate-900">Privacy</Link></li>
+                <li><Link href="/terms" className="hover:text-slate-900">Terms</Link></li>
               </ul>
             </div>
             <div>

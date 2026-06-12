@@ -5,11 +5,14 @@ import { Input, Textarea } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Modal } from "@/components/ui/modal";
+import { useFeedback } from "@/components/ui/feedback";
 import { PageHeader } from "@/components/ui/page-header";
 import { Badge } from "@/components/ui/badge";
 import { createEmailTemplate, updateEmailTemplate, deleteEmailTemplate, type EmailTemplateRow } from "@/lib/queries/templates";
+import { formatDate } from "@/lib/utils";
 
 export function TemplatesView({ templates }: { templates: EmailTemplateRow[] }) {
+  const { confirm } = useFeedback();
   const [pending, start] = useTransition();
   const [editing, setEditing] = useState<EmailTemplateRow | "new" | null>(null);
   const [search, setSearch] = useState("");
@@ -46,8 +49,8 @@ export function TemplatesView({ templates }: { templates: EmailTemplateRow[] }) 
     });
   }
 
-  function handleDelete(id: string) {
-    if (!confirm("Delete this template?")) return;
+  async function handleDelete(id: string) {
+    if (!(await confirm({ title: "Delete template?", message: "Delete this template?", confirmLabel: "Delete", danger: true }))) return;
     start(async () => { await deleteEmailTemplate(id); });
   }
 
@@ -90,7 +93,7 @@ export function TemplatesView({ templates }: { templates: EmailTemplateRow[] }) 
 
                 <div className="flex items-center justify-between mt-4 pt-4 border-t border-slate-100">
                   <div className="text-xs text-slate-500">
-                    <p className="text-slate-400">Modified {new Date(t.updated_at).toLocaleDateString()}</p>
+                    <p className="text-slate-400">Modified {formatDate(t.updated_at)}</p>
                   </div>
                   <div className="flex items-center gap-1">
                     <Button variant="ghost" size="icon" onClick={() => openEdit(t)}><Edit3 className="h-3.5 w-3.5" /></Button>

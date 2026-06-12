@@ -13,6 +13,7 @@ import { OutreachTab } from "@/components/leads/tabs/outreach";
 import { NextStepsTab } from "@/components/leads/tabs/next-steps";
 import { SendEmailModal } from "@/components/leads/send-email-modal";
 import type { LeadRow } from "@/lib/queries/leads";
+import { formatDate } from "@/lib/utils";
 
 interface Activity {
   id: string;
@@ -41,7 +42,7 @@ function relativeTime(iso: string): string {
   if (hours < 24) return `${hours}h ago`;
   const days = Math.floor(hours / 24);
   if (days < 30) return `${days}d ago`;
-  return new Date(iso).toLocaleDateString();
+  return formatDate(iso);
 }
 
 export function LeadDetailView({ lead, activities }: { lead: LeadRow; activities: Activity[] }) {
@@ -182,7 +183,7 @@ export function LeadDetailView({ lead, activities }: { lead: LeadRow; activities
               </div>
               <div className="flex items-center justify-between">
                 <span className="text-slate-500">Created</span>
-                <span className="font-medium text-slate-900">{new Date(lead.created_at).toLocaleDateString()}</span>
+                <span className="font-medium text-slate-900">{formatDate(lead.created_at)}</span>
               </div>
               <div className="flex items-center justify-between">
                 <span className="text-slate-500">Interest area</span>

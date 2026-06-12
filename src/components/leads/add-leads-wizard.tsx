@@ -1,0 +1,592 @@
+"use client";
+import { useRef, useState, useTransition } from "react";
+import { useRouter } from "next/navigation";
+import {
+  X, Search, Megaphone, Video, Camera, AtSign, FileSpreadsheet,
+  ArrowLeft, ArrowRight, Loader2, CheckCircle2, AlertCircle, AlertTriangle,
+  Upload, Plus, Trash2, Users2,
+} from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { useFeedback } from "@/components/ui/feedback";
+import { bulkInsertLeads, type LeadRow } from "@/lib/queries/leads";
+
+type SourceId = "linkedin-search" | "linkedin-post" | "youtube" | "instagram" | "twitter" | "csv";
+
+interface SourceDef {
+  id: SourceId;
+  label: string;
+  desc: string;
+  icon: React.ComponentType<{ className?: string }>;
+  color: string;
+  badge?: string;
+}
+
+const SOURCES: SourceDef[] = [
+  { id: "linkedin-search", label: "Basic LinkedIn Search", desc: "Add profiles from the free LinkedIn search page", icon: Search, color: "text-blue-600 bg-blue-50" },
+  { id: "linkedin-post", label: "LinkedIn Post", desc: "Capture people who engaged with a post", icon: Megaphone, color: "text-sky-600 bg-sky-50", badge: "New" },
+  { id: "youtube", label: "YouTube Post", desc: "Scrape engagers from a video or post", icon: Video, color: "text-red-600 bg-red-50" },
+  { id: "instagram", label: "Instagram Leads", desc: "Followers or post engagement", icon: Camera, color: "text-pink-600 bg-pink-50" },
+  { id: "twitter", label: "Twitter Leads", desc: "Followers or tweet engagement", icon: AtSign, color: "text-slate-700 bg-slate-100" },
+  { id: "csv", label: "Upload CSV file", desc: "Import an existing prospect list in bulk", icon: FileSpreadsheet, color: "text-emerald-600 bg-emerald-50" },
+];
+
+const SOURCE_LABEL: Record<SourceId, string> = {
+  "linkedin-search": "LinkedIn Search",
+  "linkedin-post": "LinkedIn Post",
+  youtube: "YouTube",
+  instagram: "Instagram",
+  twitter: "Twitter / X",
+  csv: "CSV Upload",
+};
+
+type ManualLead = { id: string; name: string; title: string; url: string };
+
+type CsvRow = {
+  full_name: string | null;
+  email: string | null;
+  phone: string | null;
+  company_name: string | null;
+  industry: string | null;
+  interest_area: string | null;
+  linkedin: string | null;
+  website_url: string | null;
+  _valid: boolean;
+  _reason?: string;
+};
+
+const CSV_HEADER_MAP: Record<string, keyof CsvRow> = {
+  full_name: "full_name", fullname: "full_name", "full name": "full_name", name: "full_name",
+  company_name: "company_name", companyname: "company_name", "company name": "company_name", company: "company_name",
+  email: "email", "email address": "email",
+  phone: "phone", "phone number": "phone",
+  industry: "industry",
+  interest_area: "interest_area", interestarea: "interest_area", "interest area": "interest_area", interest: "interest_area", title: "interest_area",
+  linkedin: "linkedin", "linkedin url": "linkedin",
+  website_url: "website_url", weburl: "website_url", "web url": "website_url", website: "website_url", url: "website_url",
+};
+
+function splitCsvLine(line: string): string[] {
+  const out: string[] = [];
+  let cur = "", inQuotes = false;
+  for (let i = 0; i < line.length; i++) {
+    const c = line[i];
+    if (inQuotes) {
+      if (c === '"') { if (line[i + 1] === '"') { cur += '"'; i++; } else inQuotes = false; }
+      else cur += c;
+    } else {
+      if (c === ",") { out.push(cur); cur = ""; }
+      else if (c === '"') inQuotes = true;
+      else cur += c;
+    }
+  }
+  out.push(cur);
+  return out.map((s) => s.trim());
+}
+
+function parseCsv(text: string): CsvRow[] {
+  const lines = text.replace(/\r\n/g, "\n").replace(/\r/g, "\n").split("\n").filter((l) => l.trim());
+  if (!lines.length) return [];
+  const headers = splitCsvLine(lines[0]).map((h) => CSV_HEADER_MAP[h.toLowerCase().trim()] ?? null);
+  const rows: CsvRow[] = [];
+  for (let i = 1; i < lines.length; i++) {
+    const cells = splitCsvLine(lines[i]);
+    const row: CsvRow = { full_name: null, email: null, phone: null, company_name: null, industry: null, interest_area: null, linkedin: null, website_url: null, _valid: false };
+    cells.forEach((v, c) => {
+      const key = headers[c];
+      if (key && v) (row as Record<string, string | null | boolean>)[key] = v;
+    });
+    const hasIdentity = !!(row.full_name || row.company_name);
+    const hasContact = !!(row.email || row.website_url);
+    row._valid = hasIdentity && hasContact;
+    if (!row._valid) row._reason = !hasIdentity ? "Missing name/company" : "Missing email/website";
+    rows.push(row);
+  }
+  return rows;
+}
+
+let _mid = 0;
+const newManual = (): ManualLead => ({ id: `m${++_mid}`, name: "", title: "", url: "" });
+const manualInvalidCount = (rows: ManualLead[]) => rows.filter((m) => !m.url.trim() && (m.name.trim() || m.title.trim())).length;
+
+export function AddLeadsWizard({ open, onClose }: { open: boolean; onClose: () => void }) {
+  const router = useRouter();
+  const { confirm } = useFeedback();
+  const [step, setStep] = useState(1);
+  const [source, setSource] = useState<SourceId | null>(null);
+
+  // Step 2 — source input
+  const [inputMode, setInputMode] = useState<string>("");
+  const [inputValue, setInputValue] = useState("");
+  const [step2Error, setStep2Error] = useState<string | null>(null);
+  const [step2Warning, setStep2Warning] = useState<string | null>(null);
+
+  // Collected leads
+  const [manual, setManual] = useState<ManualLead[]>([newManual()]);
+  const [csvRows, setCsvRows] = useState<CsvRow[] | null>(null);
+  const [csvName, setCsvName] = useState("");
+  const [dragOver, setDragOver] = useState(false);
+  const fileRef = useRef<HTMLInputElement>(null);
+
+  // Import
+  const [pending, start] = useTransition();
+  const [summary, setSummary] = useState<{ imported: number; skipped: number; duplicates: number } | null>(null);
+  const [importError, setImportError] = useState<string | null>(null);
+
+  if (!open) return null;
+
+  const isCsv = source === "csv";
+  const isSocial = !!source && !isCsv;
+
+  function reset() {
+    setStep(1); setSource(null); setInputMode(""); setInputValue("");
+    setStep2Error(null); setStep2Warning(null);
+    setManual([newManual()]); setCsvRows(null); setCsvName(""); setDragOver(false);
+    setSummary(null); setImportError(null);
+  }
+
+  function hasProgress() {
+    return source !== null || inputValue.trim() !== "" || csvRows !== null ||
+      manual.some((m) => m.name || m.title || m.url);
+  }
+
+  async function attemptClose() {
+    if (summary) { reset(); onClose(); return; }       // already imported — just close
+    if (hasProgress() && !(await confirm({ title: "Discard import?", message: "Your progress will be lost.", confirmLabel: "Discard", danger: true }))) return;
+    reset();
+    onClose();
+  }
+
+  function chooseSource(id: SourceId) {
+    setSource(id);
+    setStep2Error(null);
+    setStep2Warning(null);
+    setInputValue("");
+    setInputMode(id === "instagram" ? "account" : id === "twitter" ? "handle" : "");
+  }
+
+  // ---- CSV handling ----
+  function handleFile(file: File) {
+    setStep2Error(null);
+    if (!file.name.toLowerCase().endsWith(".csv")) { setStep2Error("Please choose a .csv file"); return; }
+    setCsvName(file.name);
+    const reader = new FileReader();
+    reader.onerror = () => setStep2Error("Failed to read file");
+    reader.onload = () => {
+      const parsed = parseCsv(String(reader.result || ""));
+      if (!parsed.length) { setStep2Error("CSV is empty or could not be parsed"); return; }
+      setCsvRows(parsed);
+    };
+    reader.readAsText(file);
+  }
+
+  // ---- Step 2 validation ----
+  function validateStep2(): boolean {
+    setStep2Error(null);
+    setStep2Warning(null);
+    if (isCsv) {
+      if (!csvRows || csvRows.filter((r) => r._valid).length === 0) { setStep2Error("Upload a CSV with at least one valid row."); return false; }
+      return true;
+    }
+    const v = inputValue.trim();
+    if (source === "linkedin-search") {
+      if (!v) { setStep2Error("Paste a LinkedIn search URL to continue."); return false; }
+      if (!/linkedin\.com/i.test(v)) { setStep2Error("That doesn't look like a LinkedIn URL."); return false; }
+    }
+    if (source === "linkedin-post") {
+      if (!v) { setStep2Error("Paste the LinkedIn post URL."); return false; }
+      if (!/linkedin\.com/i.test(v)) { setStep2Error("Enter a valid LinkedIn post URL."); return false; }
+    }
+    if (source === "youtube") {
+      if (!v) { setStep2Error("Paste the YouTube video URL."); return false; }
+      if (!/(youtube\.com|youtu\.be)/i.test(v)) { setStep2Error("Invalid or private video URL. Enter a public YouTube link."); return false; }
+    }
+    if (source === "instagram") {
+      if (!v) { setStep2Error(inputMode === "post" ? "Paste the Instagram post URL." : "Enter an Instagram account handle."); return false; }
+      setStep2Warning("Heads up: private accounts can't be accessed and will be skipped.");
+    }
+    if (source === "twitter") {
+      if (!v) { setStep2Error(inputMode === "tweet" ? "Paste the tweet URL." : "Enter a Twitter/X handle."); return false; }
+      setStep2Warning("If you hit a rate limit, wait a minute and retry.");
+    }
+    return true;
+  }
+
+  function next() {
+    if (step === 1 && !source) return;
+    if (step === 2 && !validateStep2()) return;
+    setStep((s) => Math.min(4, s + 1));
+  }
+  function back() { setStep((s) => Math.max(1, s - 1)); }
+
+  // ---- Build payload + import (step 3 -> 4) ----
+  const csvValid = csvRows?.filter((r) => r._valid) ?? [];
+  const csvInvalid = csvRows?.filter((r) => !r._valid) ?? [];
+  // A social lead needs a profile link — that's its only contact, and the DB
+  // requires email/website/linkedin. Rows with text but no link are skipped.
+  const manualValid = manual.filter((m) => m.url.trim());
+  const manualInvalid = manual.filter((m) => !m.url.trim() && (m.name.trim() || m.title.trim()));
+  const reviewCount = isCsv ? csvValid.length : manualValid.length;
+
+  function runImport() {
+    setImportError(null);
+    const sourceLabel = source ? SOURCE_LABEL[source] : "Import";
+    let payload: Array<Partial<LeadRow>>;
+    let skipped: number;
+
+    if (isCsv) {
+      skipped = csvInvalid.length;
+      payload = csvValid.map((r) => ({
+        full_name: r.full_name, email: r.email, phone: r.phone,
+        company_name: r.company_name, industry: r.industry, interest_area: r.interest_area,
+        linkedin: r.linkedin, website_url: r.website_url, source: "CSV Upload", status: "New",
+      }));
+    } else {
+      skipped = manualInvalid.length;
+      const linkField = source === "linkedin-search" || source === "linkedin-post";
+      payload = manualValid.map((m) => ({
+        full_name: m.name.trim() || null,
+        message: m.title.trim() || null,
+        linkedin: linkField ? (m.url.trim() || null) : null,
+        website_url: !linkField ? (m.url.trim() || null) : null,
+        source: sourceLabel,
+        status: "New",
+      }));
+    }
+
+    start(async () => {
+      const res = await bulkInsertLeads(payload, { defaultSource: sourceLabel });
+      if (res.error) { setImportError(res.error); return; }
+      setSummary({ imported: res.inserted, skipped, duplicates: res.duplicates });
+      setStep(4);
+      router.refresh();
+    });
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+      <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-sm" onClick={attemptClose} />
+      <div className="relative bg-white rounded-xl shadow-xl w-full max-w-2xl max-h-[90vh] overflow-hidden flex flex-col">
+        {/* Header + progress */}
+        <div className="p-5 border-b border-slate-100">
+          <div className="flex items-start justify-between">
+            <div>
+              <h2 className="font-semibold text-lg text-slate-900">Create a list of leads below</h2>
+              <p className="text-sm text-slate-500 mt-0.5">Step {step} of 4 · {step === 1 ? "Choose a source" : step === 2 ? SOURCE_LABEL[source!] : step === 3 ? "Review" : "Summary"}</p>
+            </div>
+            <button onClick={attemptClose} aria-label="Close" className="text-slate-400 hover:text-slate-700 rounded-md p-1">
+              <X className="h-5 w-5" />
+            </button>
+          </div>
+          <div className="mt-4 flex gap-1.5">
+            {[1, 2, 3, 4].map((n) => (
+              <div key={n} className={`h-1.5 flex-1 rounded-full ${n <= step ? "bg-blue-600" : "bg-slate-200"}`} />
+            ))}
+          </div>
+        </div>
+
+        {/* Body */}
+        <div className="overflow-auto flex-1 p-5">
+          {step === 1 && (
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              {SOURCES.map((s) => {
+                const Icon = s.icon;
+                const active = source === s.id;
+                return (
+                  <button
+                    key={s.id}
+                    onClick={() => chooseSource(s.id)}
+                    className={`relative text-left rounded-xl border p-4 transition-all ${active ? "border-blue-500 ring-2 ring-blue-100 bg-blue-50/40" : "border-slate-200 hover:border-slate-300 hover:bg-slate-50"}`}
+                  >
+                    {s.badge && (
+                      <span className="absolute top-3 right-3 text-[10px] font-bold uppercase tracking-wide bg-blue-600 text-white rounded-full px-2 py-0.5">{s.badge}</span>
+                    )}
+                    <div className={`h-10 w-10 rounded-lg flex items-center justify-center mb-3 ${s.color}`}>
+                      <Icon className="h-5 w-5" />
+                    </div>
+                    <p className="font-semibold text-slate-900 text-sm">{s.label}</p>
+                    <p className="text-xs text-slate-500 mt-0.5">{s.desc}</p>
+                  </button>
+                );
+              })}
+            </div>
+          )}
+
+          {step === 2 && (
+            <Step2Input
+              source={source!}
+              inputMode={inputMode}
+              setInputMode={setInputMode}
+              inputValue={inputValue}
+              setInputValue={(v) => { setInputValue(v); setStep2Error(null); }}
+              error={step2Error}
+              warning={step2Warning}
+              csvRows={csvRows}
+              csvName={csvName}
+              dragOver={dragOver}
+              setDragOver={setDragOver}
+              fileRef={fileRef}
+              onFile={handleFile}
+              clearCsv={() => { setCsvRows(null); setCsvName(""); }}
+            />
+          )}
+
+          {step === 3 && (
+            isCsv ? (
+              <CsvReview rows={csvRows ?? []} valid={csvValid.length} invalid={csvInvalid.length} />
+            ) : (
+              <ManualReview source={source!} manual={manual} setManual={setManual} />
+            )
+          )}
+
+          {step === 4 && summary && (
+            <div className="text-center py-6">
+              <div className="h-14 w-14 mx-auto rounded-full bg-emerald-50 flex items-center justify-center mb-4">
+                <CheckCircle2 className="h-7 w-7 text-emerald-600" />
+              </div>
+              <h3 className="text-lg font-semibold text-slate-900">Import complete</h3>
+              <p className="text-sm text-slate-500 mt-1">Your leads have been added to the workspace.</p>
+              <div className="grid grid-cols-3 gap-3 mt-6 max-w-md mx-auto">
+                <div className="p-3 bg-emerald-50 rounded-lg"><p className="text-2xl font-bold text-emerald-700">{summary.imported}</p><p className="text-xs text-emerald-600 mt-1">Imported</p></div>
+                <div className="p-3 bg-amber-50 rounded-lg"><p className="text-2xl font-bold text-amber-700">{summary.duplicates}</p><p className="text-xs text-amber-600 mt-1">Duplicates</p></div>
+                <div className="p-3 bg-slate-100 rounded-lg"><p className="text-2xl font-bold text-slate-700">{summary.skipped}</p><p className="text-xs text-slate-500 mt-1">Skipped</p></div>
+              </div>
+            </div>
+          )}
+
+          {importError && (
+            <div className="mt-4 flex items-start gap-2 bg-red-50 border border-red-200 rounded-lg p-3 text-sm text-red-700">
+              <AlertCircle className="h-4 w-4 mt-0.5 flex-shrink-0" /> <span>{importError}</span>
+            </div>
+          )}
+        </div>
+
+        {/* Footer nav */}
+        <div className="p-4 border-t border-slate-100 flex items-center justify-between">
+          {step > 1 && step < 4 ? (
+            <Button variant="outline" onClick={back} disabled={pending}><ArrowLeft className="h-4 w-4" /> Back</Button>
+          ) : <span />}
+
+          {step < 3 && (
+            <Button onClick={next} disabled={step === 1 ? !source : false}>
+              Next <ArrowRight className="h-4 w-4" />
+            </Button>
+          )}
+          {step === 3 && (
+            <Button onClick={runImport} disabled={pending || reviewCount === 0}>
+              {pending ? <><Loader2 className="h-4 w-4 animate-spin" /> Importing…</> : <>Import {reviewCount} lead{reviewCount === 1 ? "" : "s"}</>}
+            </Button>
+          )}
+          {step === 4 && (
+            <Button onClick={() => { reset(); onClose(); }}>Done</Button>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ============================================================================
+function Step2Input(props: {
+  source: SourceId;
+  inputMode: string;
+  setInputMode: (m: string) => void;
+  inputValue: string;
+  setInputValue: (v: string) => void;
+  error: string | null;
+  warning: string | null;
+  csvRows: CsvRow[] | null;
+  csvName: string;
+  dragOver: boolean;
+  setDragOver: (b: boolean) => void;
+  fileRef: React.RefObject<HTMLInputElement | null>;
+  onFile: (f: File) => void;
+  clearCsv: () => void;
+}) {
+  const { source, inputMode, setInputMode, inputValue, setInputValue, error, warning, csvRows, csvName, dragOver, setDragOver, fileRef, onFile, clearCsv } = props;
+
+  const fieldLabel: Record<SourceId, string> = {
+    "linkedin-search": "LinkedIn search URL",
+    "linkedin-post": "LinkedIn post URL",
+    youtube: "YouTube video / post URL",
+    instagram: inputMode === "post" ? "Instagram post URL" : "Instagram account handle",
+    twitter: inputMode === "tweet" ? "Tweet URL" : "Twitter / X handle",
+    csv: "",
+  };
+  const placeholder: Record<SourceId, string> = {
+    "linkedin-search": "https://www.linkedin.com/search/results/people/?keywords=…",
+    "linkedin-post": "https://www.linkedin.com/posts/…",
+    youtube: "https://www.youtube.com/watch?v=…",
+    instagram: inputMode === "post" ? "https://www.instagram.com/p/…" : "@account",
+    twitter: inputMode === "tweet" ? "https://x.com/user/status/…" : "@handle",
+    csv: "",
+  };
+
+  if (source === "csv") {
+    return (
+      <div className="space-y-4">
+        <input ref={fileRef} type="file" accept=".csv,text/csv" className="hidden"
+          onChange={(e) => { const f = e.target.files?.[0]; if (f) onFile(f); e.target.value = ""; }} />
+        {!csvRows ? (
+          <>
+            <div
+              onDragOver={(e) => { e.preventDefault(); setDragOver(true); }}
+              onDragLeave={() => setDragOver(false)}
+              onDrop={(e) => { e.preventDefault(); setDragOver(false); const f = e.dataTransfer.files?.[0]; if (f) onFile(f); }}
+              className={`border-2 border-dashed rounded-xl p-10 text-center transition-colors ${dragOver ? "border-blue-400 bg-blue-50" : "border-slate-300 bg-slate-50"}`}
+            >
+              <div className="h-12 w-12 mx-auto rounded-full bg-blue-50 flex items-center justify-center mb-3">
+                <Upload className="h-6 w-6 text-blue-600" />
+              </div>
+              <p className="font-medium text-slate-900 mb-1">Drag &amp; drop a CSV here</p>
+              <p className="text-sm text-slate-500 mb-4">or pick a file from your computer</p>
+              <Button onClick={() => fileRef.current?.click()}>Choose file</Button>
+            </div>
+            <div className="bg-blue-50 border border-blue-100 rounded-lg p-4 text-sm text-slate-700">
+              <p className="font-semibold text-slate-900 mb-1">Columns we recognise</p>
+              <p><code className="text-xs">full_name</code>/<code className="text-xs">company_name</code> and <code className="text-xs">email</code>/<code className="text-xs">website_url</code> are required; <code className="text-xs">title</code>, <code className="text-xs">phone</code>, <code className="text-xs">industry</code>, <code className="text-xs">linkedin</code> optional.</p>
+            </div>
+          </>
+        ) : (
+          <div className="flex items-center gap-3 p-3 bg-slate-50 rounded-lg">
+            <FileSpreadsheet className="h-8 w-8 text-emerald-600" />
+            <div className="flex-1">
+              <p className="font-medium text-slate-900 text-sm">{csvName}</p>
+              <p className="text-xs text-slate-500">{csvRows.length} row{csvRows.length === 1 ? "" : "s"} parsed · {csvRows.filter((r) => r._valid).length} valid</p>
+            </div>
+            <button onClick={clearCsv} className="text-xs text-slate-500 hover:text-slate-700 underline">Choose different file</button>
+          </div>
+        )}
+        {error && <ErrorNote text={error} />}
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-4">
+      {source === "instagram" && <ModeToggle options={[["account", "Followers of an account"], ["post", "Post engagement"]]} value={inputMode} onChange={setInputMode} />}
+      {source === "twitter" && <ModeToggle options={[["handle", "Followers of a handle"], ["tweet", "Tweet engagement"]]} value={inputMode} onChange={setInputMode} />}
+
+      <div>
+        <label className="block text-sm font-medium text-slate-700 mb-1.5">{fieldLabel[source]}</label>
+        <Input value={inputValue} onChange={(e) => setInputValue(e.target.value)} placeholder={placeholder[source]} />
+      </div>
+
+      <div className="bg-slate-50 border border-slate-200 rounded-lg p-3 text-xs text-slate-600 flex items-start gap-2">
+        <AlertCircle className="h-4 w-4 mt-0.5 flex-shrink-0 text-slate-400" />
+        <span>
+          Automated retrieval for {SOURCE_LABEL[source]} runs after you connect the channel. For now, enter the source above and add the
+          profiles you found in the next step — name, title and profile link are captured to your list.
+        </span>
+      </div>
+
+      {error && <ErrorNote text={error} />}
+      {warning && (
+        <div className="flex items-start gap-2 bg-amber-50 border border-amber-200 rounded-lg p-3 text-sm text-amber-800">
+          <AlertTriangle className="h-4 w-4 mt-0.5 flex-shrink-0" /> <span>{warning}</span>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function ModeToggle({ options, value, onChange }: { options: [string, string][]; value: string; onChange: (v: string) => void }) {
+  return (
+    <div className="inline-flex rounded-lg border border-slate-200 p-0.5 bg-slate-50">
+      {options.map(([val, label]) => (
+        <button key={val} onClick={() => onChange(val)}
+          className={`px-3 py-1.5 text-sm rounded-md transition-colors ${value === val ? "bg-white shadow-sm text-slate-900 font-medium" : "text-slate-500 hover:text-slate-700"}`}>
+          {label}
+        </button>
+      ))}
+    </div>
+  );
+}
+
+function ErrorNote({ text }: { text: string }) {
+  return (
+    <div className="flex items-start gap-2 bg-red-50 border border-red-200 rounded-lg p-3 text-sm text-red-700">
+      <AlertCircle className="h-4 w-4 mt-0.5 flex-shrink-0" /> <span>{text}</span>
+    </div>
+  );
+}
+
+function CsvReview({ rows, valid, invalid }: { rows: CsvRow[]; valid: number; invalid: number }) {
+  return (
+    <div className="space-y-4">
+      <div className="grid grid-cols-2 gap-3 text-center">
+        <div className="p-3 bg-emerald-50 rounded-lg"><p className="text-2xl font-bold text-emerald-700">{valid}</p><p className="text-xs text-emerald-600 mt-1">Valid rows</p></div>
+        <div className="p-3 bg-red-50 rounded-lg"><p className="text-2xl font-bold text-red-700">{invalid}</p><p className="text-xs text-red-600 mt-1">Will be skipped</p></div>
+      </div>
+      <div className="border border-slate-200 rounded-lg overflow-hidden">
+        <table className="w-full text-sm">
+          <thead className="bg-slate-50 text-xs uppercase text-slate-500">
+            <tr><th className="px-3 py-2 text-left font-semibold">Name</th><th className="px-3 py-2 text-left font-semibold">Email</th><th className="px-3 py-2 text-left font-semibold">Company</th><th className="px-3 py-2 text-left font-semibold">Status</th></tr>
+          </thead>
+          <tbody className="divide-y divide-slate-100">
+            {rows.slice(0, 8).map((r, i) => (
+              <tr key={i} className={r._valid ? "" : "bg-red-50/50"}>
+                <td className="px-3 py-2">{r.full_name || <span className="text-slate-400">—</span>}</td>
+                <td className="px-3 py-2">{r.email || <span className="text-slate-400">—</span>}</td>
+                <td className="px-3 py-2">{r.company_name || <span className="text-slate-400">—</span>}</td>
+                <td className="px-3 py-2">{r._valid ? <CheckCircle2 className="h-4 w-4 text-emerald-500" /> : <span className="inline-flex items-center gap-1 text-red-600 text-xs"><AlertCircle className="h-3.5 w-3.5" /> {r._reason}</span>}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+        {rows.length > 8 && <p className="text-xs text-slate-500 px-3 py-2 bg-slate-50 border-t border-slate-100">Showing first 8 of {rows.length} rows</p>}
+      </div>
+    </div>
+  );
+}
+
+function ManualReview({ source, manual, setManual }: { source: SourceId; manual: ManualLead[]; setManual: (m: ManualLead[]) => void }) {
+  const titleLabel = source === "youtube" ? "Comment / note" : source === "instagram" || source === "twitter" ? "Display name" : "Title / role";
+  const urlLabel = source === "linkedin-search" || source === "linkedin-post" ? "Profile URL" : source === "youtube" ? "Channel link" : "Profile link";
+
+  function update(id: string, key: keyof ManualLead, value: string) {
+    setManual(manual.map((m) => (m.id === id ? { ...m, [key]: value } : m)));
+  }
+  function add() { setManual([...manual, newManual()]); }
+  function remove(id: string) { setManual(manual.length === 1 ? [newManual()] : manual.filter((m) => m.id !== id)); }
+
+  const validCount = manual.filter((m) => m.url.trim()).length;
+
+  return (
+    <div className="space-y-3">
+      <div className="flex items-center justify-between gap-3">
+        <p className="text-sm text-slate-600">Add the profiles you found from <span className="font-medium text-slate-900">{SOURCE_LABEL[source]}</span>. Each row needs a <span className="font-medium text-slate-900">profile link</span> to import.</p>
+        <span className="inline-flex items-center gap-1.5 text-xs text-slate-500 whitespace-nowrap"><Users2 className="h-3.5 w-3.5" /> {validCount} ready</span>
+      </div>
+      <div className="space-y-2">
+        <div className="hidden sm:grid grid-cols-[1fr_1fr_1.4fr_auto] gap-2 px-1 text-[11px] uppercase tracking-wide text-slate-400 font-semibold">
+          <span>Name</span><span>{titleLabel}</span><span>{urlLabel} *</span><span></span>
+        </div>
+        {manual.map((m) => {
+          const missingLink = !m.url.trim() && (m.name.trim() || m.title.trim());
+          return (
+            <div key={m.id} className="grid grid-cols-1 sm:grid-cols-[1fr_1fr_1.4fr_auto] gap-2">
+              <Input value={m.name} onChange={(e) => update(m.id, "name", e.target.value)} placeholder="Jane Doe" />
+              <Input value={m.title} onChange={(e) => update(m.id, "title", e.target.value)} placeholder={titleLabel} />
+              <Input
+                value={m.url}
+                onChange={(e) => update(m.id, "url", e.target.value)}
+                placeholder="https://…"
+                className={missingLink ? "border-amber-300 focus:ring-amber-200" : ""}
+              />
+              <button onClick={() => remove(m.id)} aria-label="Remove row" className="justify-self-start sm:justify-self-center p-2 rounded-md hover:bg-red-50 text-slate-400 hover:text-red-600">
+                <Trash2 className="h-4 w-4" />
+              </button>
+            </div>
+          );
+        })}
+      </div>
+      <Button variant="outline" size="sm" onClick={add}><Plus className="h-4 w-4" /> Add another</Button>
+      {manualInvalidCount(manual) > 0 && (
+        <p className="text-xs text-amber-700 flex items-center gap-1.5">
+          <AlertTriangle className="h-3.5 w-3.5" /> {manualInvalidCount(manual)} row{manualInvalidCount(manual) === 1 ? "" : "s"} without a link will be skipped.
+        </p>
+      )}
+    </div>
+  );
+}

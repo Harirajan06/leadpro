@@ -8,6 +8,7 @@ import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { PageHeader } from "@/components/ui/page-header";
 import { Modal } from "@/components/ui/modal";
+import { useFeedback } from "@/components/ui/feedback";
 import { markRead, markUnread, sendReply, type InboxConversation } from "@/lib/queries/inbox";
 import { addBlocklistEntry } from "@/lib/queries/blocklist";
 import { getEmailTemplates, type EmailTemplateRow } from "@/lib/queries/templates";
@@ -27,6 +28,7 @@ function relativeTime(iso: string): string {
 
 export function InboxView({ conversations }: { conversations: InboxConversation[] }) {
   const router = useRouter();
+  const { toast } = useFeedback();
   const [pending, start] = useTransition();
   const [archived, setArchived] = useState<Set<string>>(new Set());
   const visible = conversations.filter((c) => !archived.has(c.id));
@@ -80,7 +82,11 @@ export function InboxView({ conversations }: { conversations: InboxConversation[
   function handleSend() {
     if (!active?.lead_id || !reply.trim()) return;
     start(async () => {
-      await sendReply(active.lead_id!, `Re: ${active.subject || ""}`, reply.trim());
+      const res = await sendReply(active.lead_id!, `Re: ${active.subject || ""}`, reply.trim());
+      if (!res.ok) {
+        toast(res.error || "Reply failed to send", "error");
+        return;
+      }
       setReply("");
       setAttachment(null);
     });
@@ -144,12 +150,12 @@ export function InboxView({ conversations }: { conversations: InboxConversation[
     const email = active.lead_email;
     setMoreOpen(false);
     if (!email) {
-      alert("No sender email available to block");
+      toast("No sender email available to block", "error");
       return;
     }
     start(async () => {
       await addBlocklistEntry(email, "Blocked from inbox");
-      alert(`Blocked ${email}`);
+      toast(`Blocked ${email}`, "success");
     });
   }
 
@@ -177,7 +183,7 @@ export function InboxView({ conversations }: { conversations: InboxConversation[
   function handleForwardSubmit() {
     setForwardOpen(false);
     setForwardTo("");
-    alert("Forwarded");
+    toast("Forwarded", "success");
   }
 
   const activeTags = active ? (tagsByConv.get(active.id) || []) : [];

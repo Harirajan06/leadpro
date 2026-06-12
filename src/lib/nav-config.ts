@@ -29,8 +29,6 @@ export const navMainItems: NavItem[] = [
   { label: "Inbox", href: "/inbox", icon: Inbox, roles: SALES },
   { label: "Segments", href: "/segments", icon: Layers3, roles: MARKETING },
   { label: "Newsletters", href: "/newsletters", icon: Newspaper, roles: MARKETING },
-  { label: "Templates", href: "/templates", icon: FileText, roles: ALL },
-  { label: "Workflows", href: "/workflows", icon: Workflow, roles: ALL },
   { label: "Analytics", href: "/analytics", icon: BarChart3, roles: ALL },
 ];
 

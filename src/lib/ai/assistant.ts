@@ -487,7 +487,7 @@ async function chatCompletion(body: Record<string, unknown>): Promise<{ ok: true
 // Main entry
 // ---------------------------------------------------------------------------
 export async function runAssistant(history: AssistantMessage[]): Promise<AssistantResult> {
-  if (!API_KEY) return { reply: "", actions: [], error: "AI is not configured (missing AI_API_KEY)." };
+  if (!API_KEY) return { reply: "", actions: [], error: "AI isn't enabled on this environment. An admin needs to add the AI_API_KEY (and AI_MODEL) environment variables to the deployment, then redeploy." };
 
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();

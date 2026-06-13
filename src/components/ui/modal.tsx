@@ -23,8 +23,8 @@ export function Modal({ open, onClose, title, description, children, size = "md"
   if (!open) return null;
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-      <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-sm" onClick={onClose} />
-      <div className={cn("relative bg-white rounded-xl shadow-xl w-full max-h-[90vh] overflow-hidden flex flex-col", sizes[size])}>
+      <div className="lp-anim-fade fixed inset-0 bg-slate-900/40 backdrop-blur-sm" onClick={onClose} />
+      <div className={cn("lp-anim-scale relative bg-white rounded-xl shadow-xl w-full max-h-[90vh] overflow-hidden flex flex-col", sizes[size])}>
         {(title || description) && (
           <div className="p-5 border-b border-slate-100 flex items-start justify-between">
             <div>

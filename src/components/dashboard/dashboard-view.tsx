@@ -1,11 +1,18 @@
 "use client";
-import { Users2, Flame, MailOpen, Target, FileDown, Mouse, Calendar, Reply, BarChart3, MoreHorizontal } from "lucide-react";
+import { useRouter } from "next/navigation";
+import { Users2, Flame, MailOpen, Target, FileDown, Mouse, Calendar, Reply, BarChart3, MoreHorizontal, Download, Plus } from "lucide-react";
 import { Area, AreaChart, Bar, BarChart, CartesianGrid, Legend, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 import { KpiCard } from "@/components/dashboard/kpi-card";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import { useFeedback } from "@/components/ui/feedback";
 import type { DashboardStats } from "@/lib/queries/analytics";
+
+function csvCell(v: unknown): string {
+  const s = String(v ?? "");
+  return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
+}
 
 const iconForActivity: Record<string, React.ReactNode> = {
   page: <BarChart3 className="h-4 w-4" />,
@@ -28,6 +35,38 @@ const iconColor: Record<string, string> = {
 };
 
 export function DashboardView({ stats }: { stats: DashboardStats }) {
+  const router = useRouter();
+  const { toast } = useFeedback();
+
+  function handleExport() {
+    const lines: string[] = [];
+    lines.push("Metric,Value");
+    lines.push(`Total leads,${stats.totalLeads}`);
+    lines.push(`Hot leads,${stats.hotLeads}`);
+    lines.push(`Avg. open rate,${stats.avgOpenRate}%`);
+    lines.push(`Conversion rate,${stats.conversionRate}%`);
+    lines.push(`Emails sent,${stats.snapshot.emailsSent}`);
+    lines.push(`Replies received,${stats.snapshot.repliesReceived}`);
+    lines.push(`AI scored,${stats.snapshot.aiScored}`);
+    lines.push("");
+    lines.push("Month,Leads,Hot leads");
+    for (const m of stats.leadGrowth) lines.push(`${csvCell(m.date)},${m.leads},${m.hot}`);
+    lines.push("");
+    lines.push("Campaign,Open %,Reply %");
+    for (const c of stats.campaignPerf) lines.push(`${csvCell(c.name)},${c.openRate},${c.replyRate}`);
+
+    const blob = new Blob([lines.join("\n")], { type: "text/csv;charset=utf-8;" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `dashboard-report-${new Date().toISOString().slice(0, 10)}.csv`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+    toast("Dashboard report exported", "success");
+  }
+
   return (
     <div className="space-y-6 max-w-[1600px] mx-auto">
       {/* Header */}
@@ -37,8 +76,12 @@ export function DashboardView({ stats }: { stats: DashboardStats }) {
           <p className="text-slate-500 mt-1">Here&apos;s what&apos;s happening across your campaigns today.</p>
         </div>
         <div className="flex items-center gap-2">
-          <Button variant="outline">Export report</Button>
-          <Button>New campaign</Button>
+          <Button variant="outline" onClick={handleExport}>
+            <Download className="h-4 w-4" /> Export report
+          </Button>
+          <Button onClick={() => router.push("/campaigns/builder")}>
+            <Plus className="h-4 w-4" /> New campaign
+          </Button>
         </div>
       </div>
 

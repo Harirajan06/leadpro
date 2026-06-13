@@ -7,7 +7,7 @@ import {
   type AssistantChatMeta,
 } from "@/lib/ai/assistant-history";
 import { LogoMark } from "@/components/brand/logo";
-import { formatRelative } from "@/lib/utils";
+import { formatRelative, cn } from "@/lib/utils";
 
 interface ChatItem extends AssistantMessage {
   actions?: string[];
@@ -154,14 +154,25 @@ export function AssistantWidget({ open, onClose }: { open: boolean; onClose: () 
 
   return (
     <>
-      {/* Side panel — shares the window on desktop (layout column, content
-          shrinks); full-screen overlay only on phones. Stays mounted while
-          closed so the conversation survives open/close. */}
+      {/* Side panel — always mounted so it animates. On desktop it shares the
+          window (animated width column, content shrinks); on phones it slides
+          in as an overlay. Width/transform transitions = smooth open/close. */}
       <aside
-        className={`${open ? "flex" : "hidden"} fixed inset-0 z-50 sm:z-auto sm:inset-auto sm:sticky sm:top-0 h-screen w-full sm:w-[400px] sm:shrink-0 bg-white border-l border-slate-200 flex-col`}
+        className={cn(
+          "bg-white border-slate-200 flex overflow-hidden",
+          "transition-[width,transform] duration-300 ease-in-out",
+          // phone: fixed overlay sliding from the right
+          "max-sm:fixed max-sm:inset-y-0 max-sm:right-0 max-sm:z-50 max-sm:w-[400px] max-sm:max-w-full max-sm:border-l max-sm:shadow-2xl",
+          open ? "max-sm:translate-x-0" : "max-sm:translate-x-full",
+          // desktop: sticky column whose width animates 0 ↔ 400px
+          "sm:sticky sm:top-0 sm:h-screen sm:translate-x-0",
+          open ? "sm:w-[400px] sm:border-l" : "sm:w-0"
+        )}
         role="complementary"
         aria-label="LeadPro AI assistant"
       >
+        {/* Fixed-width inner so content never reflows — the outer just clips it */}
+        <div className="flex flex-col h-screen w-[400px] max-sm:w-full flex-shrink-0">
         {/* Header */}
         <div className="p-4 border-b border-slate-100 flex items-center justify-between bg-gradient-to-r from-blue-600 to-indigo-600 text-white">
           <div className="flex items-center gap-2.5">
@@ -357,6 +368,7 @@ export function AssistantWidget({ open, onClose }: { open: boolean; onClose: () 
             </div>
           </>
         )}
+        </div>
       </aside>
     </>
   );

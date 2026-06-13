@@ -2,13 +2,11 @@
 import { useState, useEffect, useRef } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { Search, ChevronDown, LogOut, User as UserIcon, Settings, Menu } from "lucide-react";
+import { Search, ChevronDown, LogOut, User as UserIcon, Settings, Menu, Sparkles } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { createClient } from "@/lib/supabase/client";
-import { CreateMenu } from "./create-menu";
 import { NotificationsBell } from "./notifications-bell";
 import { useSidebar } from "./sidebar-context";
-import { LogoMark } from "@/components/brand/logo";
 
 interface TopbarProps {
   userName?: string;
@@ -18,7 +16,7 @@ interface TopbarProps {
   assistantOpen?: boolean;
 }
 
-export function Topbar({ userName = "Guest", userEmail = "", userRole = "User", onToggleAssistant, assistantOpen = false }: TopbarProps) {
+export function Topbar({ userName = "Guest", userEmail = "", onToggleAssistant, assistantOpen = false }: TopbarProps) {
   const router = useRouter();
   const { toggleMobile } = useSidebar();
   const [open, setOpen] = useState(false);
@@ -70,9 +68,17 @@ export function Topbar({ userName = "Guest", userEmail = "", userRole = "User", 
           <Search className="h-5 w-5" />
         </button>
 
-        <div className="hidden sm:block">
-          <CreateMenu />
-        </div>
+        {/* AI Assistant launcher — rectangle pill with icon + label */}
+        <button
+          onClick={onToggleAssistant}
+          aria-label={assistantOpen ? "Close AI assistant" : "Open AI assistant"}
+          className={`flex items-center gap-1.5 rounded-lg font-semibold text-sm transition-all flex-shrink-0 px-2.5 sm:px-3 py-2 text-white bg-gradient-to-br from-blue-600 via-blue-500 to-indigo-600 shadow-sm shadow-blue-500/30 ${
+            assistantOpen ? "ring-2 ring-blue-300 shadow-md" : "hover:shadow-md hover:brightness-105 active:scale-[0.98]"
+          }`}
+        >
+          <Sparkles className="h-4 w-4 flex-shrink-0" />
+          <span className="hidden sm:inline">AI Assistant</span>
+        </button>
 
         <NotificationsBell />
 
@@ -88,13 +94,12 @@ export function Topbar({ userName = "Guest", userEmail = "", userRole = "User", 
             </div>
             <div className="hidden md:block text-left max-w-[140px]">
               <p className="text-sm font-semibold text-slate-900 leading-tight truncate">{userName}</p>
-              <p className="text-xs text-slate-500 leading-tight truncate">{userRole}</p>
             </div>
             <ChevronDown className="hidden sm:block h-3.5 w-3.5 text-slate-400 flex-shrink-0" />
           </button>
 
           {open && (
-            <div className="absolute right-0 top-full mt-1 w-60 bg-white rounded-xl border border-slate-200 shadow-lg overflow-hidden z-40">
+            <div className="lp-anim-pop origin-top-right absolute right-0 top-full mt-1 w-60 bg-white rounded-xl border border-slate-200 shadow-lg overflow-hidden z-40">
               <div className="p-3 border-b border-slate-100">
                 <p className="text-sm font-semibold text-slate-900">{userName}</p>
                 <p className="text-xs text-slate-500 truncate">{userEmail}</p>
@@ -126,18 +131,6 @@ export function Topbar({ userName = "Guest", userEmail = "", userRole = "User", 
             </div>
           )}
         </div>
-
-        {/* AI assistant launcher — trails the username */}
-        <button
-          onClick={onToggleAssistant}
-          aria-label={assistantOpen ? "Close AI assistant" : "Open AI assistant"}
-          title="LeadPro AI"
-          className={`ml-1 h-9 w-9 rounded-full flex items-center justify-center transition-all flex-shrink-0 bg-gradient-to-br from-blue-600 via-blue-500 to-indigo-600 text-white shadow-sm shadow-blue-500/30 ${
-            assistantOpen ? "ring-2 ring-blue-300 shadow-md" : "hover:shadow-md hover:scale-105 active:scale-95"
-          }`}
-        >
-          <LogoMark className="h-5 w-5" />
-        </button>
       </div>
     </header>
   );

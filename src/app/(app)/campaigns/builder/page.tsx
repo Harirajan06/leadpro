@@ -1,5 +1,5 @@
 "use client";
-import { useState, useTransition } from "react";
+import { useState, useTransition, useEffect } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { ArrowLeft, Save, Send, Sparkles, Image, Link as LinkIcon, Type, Code, Calendar, Megaphone, PartyPopper, Mail, Plus, Clock, RefreshCw, Edit3, AlertCircle, Loader2 } from "lucide-react";
@@ -9,6 +9,7 @@ import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { createCampaign } from "@/lib/queries/campaigns";
 import { generateEmailSequence, type GeneratedEmail } from "@/lib/ai/actions";
+import { getCampaignTemplate } from "@/lib/campaign-templates";
 
 const suggestions = [
   { icon: <Calendar className="h-4 w-4" />, label: "Book demo meetings", color: "bg-blue-50 text-blue-700 hover:bg-blue-100" },
@@ -30,6 +31,17 @@ export default function CampaignBuilderPage() {
     { day: "Day 3", subject: "Following up — saw your recent post on AI", body: "Hi {{firstName}}, I came across your recent post about AI transformation and wanted to share a quick case study..." },
     { day: "Day 7", subject: "Last note from me", body: "Hi {{firstName}}, I'll keep this brief. If AI-driven lead nurturing isn't a priority right now, no worries..." },
   ]);
+
+  // Pre-fill from a template when arriving via ?template=<id>
+  useEffect(() => {
+    const id = new URLSearchParams(window.location.search).get("template");
+    const tpl = getCampaignTemplate(id);
+    if (tpl) {
+      setName(tpl.name);
+      setPrompt(tpl.goal);
+      setSequence(tpl.steps.map((s) => ({ day: s.day, subject: s.subject, body: s.body })));
+    }
+  }, []);
 
   async function handleGenerate() {
     if (!prompt.trim()) { setError("Describe your campaign goal first"); return; }

@@ -5,6 +5,7 @@ import { Topbar } from "@/components/layout/topbar";
 import { MobileSidebar } from "@/components/layout/mobile-sidebar";
 import { SidebarProvider, useSidebar } from "@/components/layout/sidebar-context";
 import { AssistantWidget } from "@/components/assistant/assistant-widget";
+import { SupportWidget } from "@/components/support/support-widget";
 import { FeedbackProvider } from "@/components/ui/feedback";
 
 interface Props {
@@ -34,6 +35,8 @@ function Shell({ userName, userEmail, userRole, navAccess, children }: Props) {
       </div>
       {/* Renders as a flex column on desktop — the content area shrinks to share the window */}
       <AssistantWidget open={assistantOpen} onClose={() => setAssistantOpen(false)} />
+      {/* Support help bot — floating FAB bottom-right; shifts left when the AI panel is open */}
+      <SupportWidget assistantOpen={assistantOpen} />
     </div>
   );
 }
